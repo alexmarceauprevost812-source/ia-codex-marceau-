@@ -510,13 +510,12 @@ def show_codex_workspace(filename=None, codex_message=None):
             )
         except Exception as exc:
             body = Text(f"Impossible d'ouvrir ce fichier : {exc}", style="tilex.error")
-        title = f"[#39FF14]🤖 CODEX • ÉCRITURE / GÉNÉRATION[/] [bright_cyan]• {file_icon(selected)} {selected.name}[/]"
+        title = f"[#39FF14]CODEX • ÉCRITURE / GÉNÉRATION[/] [bright_cyan]• {file_icon(selected)} {selected.name}[/] [#39FF14]+0 ajoutée[/] [#FF1744]-0 supprimée[/]"
     else:
         body = Text(justify="right")
         body.append("Sélectionne un fichier pour l'afficher ici.\n\n", style="bright_white")
         body.append(
-            "🤖 IA   ▶️ Run   🌐 Preview   🔨 Build   🧪 Tests\n"
-            "📜 Logs   📦 Dépendances   🔀 Git   💾 Sauvegardes   ⚙️ Settings",
+            "",
             style="bright_white"
         )
         title = "[#39FF14]🤖 CODEX • ÉCRITURE / GÉNÉRATION[/]"
@@ -525,8 +524,7 @@ def show_codex_workspace(filename=None, codex_message=None):
 
     top_menu = Text(justify="center")
     top_menu.append(
-        "LOCAL AI  •  CODING  •  DEVELOPER TERMINAL    "
-        "🤖 IA  ▶ RUN  🌐 PREVIEW  🔨 BUILD  🧪 TESTS  📜 LOGS  📦 DÉPENDANCES  🔀 GIT  💾 SAUVEGARDES  ⚙ SETTINGS",
+        "LOCAL AI  •  CODING  •  DEVELOPER TERMINAL",
         style="bold #39FF14"
     )
     console.print(Panel(top_menu, border_style="bright_cyan", padding=(0, 1)))
