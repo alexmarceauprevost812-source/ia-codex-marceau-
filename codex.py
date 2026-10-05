@@ -794,6 +794,8 @@ class CodexLocalApp(App):
                 yield Button("🔨 BUILD", id="tool_build")
                 yield Button("🧪 TESTS", id="tool_tests")
                 yield Button("💾 SAUVEGARDER", id="tool_save")
+                yield Button("📋 COPIER", id="tool_copy")
+                yield Button("📥 COLLER", id="tool_paste")
         yield Input(placeholder="✍ CODEX LOCAL › écris ta commande ici…", id="user_input")
         yield Footer()
 
@@ -1161,6 +1163,15 @@ class CodexLocalApp(App):
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
             self.action_save_file()
+        elif event.button.id == "tool_copy":
+            editor = self.query_one("#editor", TextArea)
+            editor.action_copy()
+            self.notify("Code copié")
+        elif event.button.id == "tool_paste":
+            editor = self.query_one("#editor", TextArea)
+            editor.action_paste()
+            editor.focus()
+            self.notify("Code collé")
         elif event.button.id == "tool_run":
             self.action_save_file()
             if self.current_path and self.current_path.suffix == ".py":
