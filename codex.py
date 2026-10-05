@@ -19,6 +19,7 @@ from rich.theme import Theme
 from rich.highlighter import RegexHighlighter
 from prompt_toolkit import PromptSession
 from textual.app import App, ComposeResult
+from codex_engine import CodexEngine
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Footer, ListView, ListItem, Label, TextArea, Input, Button, Static
 from textual.binding import Binding
@@ -784,7 +785,23 @@ class CodexLocalApp(App):
         elif cmd.lower() in {"save", "sauve", "sauvegarde"}:
             self.action_save_file()
         elif cmd:
-            self.notify("Commande reçue : " + cmd)
+            self.notify("CODEX construit le projet. La génération peut prendre plusieurs minutes.")
+            engine = CodexEngine(self.root, model=config["model"], status=self.notify)
+            result = engine.build(cmd)
+            self.notify(result.message, severity="information" if result.ok else "error")
+            if result.ok:
+                view = self.query_one("#files", ListView)
+                view.clear()
+                for p in sorted(x for x in self.root.rglob("*") if x.is_file() and ".git" not in x.parts and ".venv" not in x.parts and ".tilex" not in x.parts):
+                    item = ListItem(Label("📄 " + str(p.relative_to(self.root))))
+                    item.path = p
+                    view.append(item)
+                if result.changed:
+                    target = (self.root / result.changed[-1]).resolve()
+                    if target.is_file():
+                        self.current_path = target
+                        self.query_one("#editor", TextArea).text = target.read_text(encoding="utf-8", errors="replace")
+                        self.query_one("#editor_title", Static).update("CODEX • GÉNÉRÉ • 📄 " + target.name)
 
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
