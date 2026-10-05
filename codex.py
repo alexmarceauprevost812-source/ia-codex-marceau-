@@ -512,8 +512,9 @@ def show_codex_workspace(filename=None):
             body = Text(f"Impossible d'ouvrir ce fichier : {exc}", style="tilex.error")
         title = f"[bright_cyan]{file_icon(selected)} {selected.name}[/]"
     else:
-        body = Text(
-            "Sélectionne un fichier pour l'afficher ici.\n\n"
+        body = Text(justify="right")
+        body.append("Sélectionne un fichier pour l'afficher ici.\n\n", style="bright_white")
+        body.append(
             "🤖 IA   ▶️ Run   🌐 Preview   🔨 Build   🧪 Tests\n"
             "📜 Logs   📦 Dépendances   🔀 Git   💾 Sauvegardes   ⚙️ Settings",
             style="bright_white"
