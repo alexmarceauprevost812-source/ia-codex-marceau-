@@ -481,7 +481,7 @@ def explorer_text(selected=None, limit=34):
         out.append(f"… +{len(paths) - limit} fichiers/dossiers\n", style="tilex.comment")
     return out
 
-def show_codex_workspace(filename=None):
+def show_codex_workspace(filename=None, codex_message=None):
     if not active_project:
         console.print("[tilex.warning]Aucun projet actif.[/]")
         return
@@ -527,6 +527,21 @@ def show_codex_workspace(filename=None):
     grid.add_column(ratio=3)
     grid.add_row(left, right)
     console.print(grid)
+
+    codex_body = Text()
+    if codex_message:
+        codex_body.append(codex_message, style="bright_white")
+    else:
+        codex_body.append(
+            "Prêt. Écris ta demande dans CODEX LOCAL › pour travailler sur le projet.",
+            style="tilex.comment"
+        )
+    console.print(Panel(
+        codex_body,
+        title="[#39FF14]🤖 CODEX[/]",
+        border_style="dark_orange",
+        padding=(0, 1)
+    ))
 
 def show_diff_preview(filename, old_text, new_text):
     import difflib
