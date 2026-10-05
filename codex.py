@@ -755,7 +755,12 @@ class CodexLocalApp(App):
     #tools Button { width: 100%; height: 3; margin: 0; background: #000000; color: #ffffff; border: none; }
     #tools Button:focus { background: #001a00; color: #39ff14; text-style: bold; }
     #editor_title { height: 3; background: #000000; content-align: center middle; color: #39ff14; text-style: bold; }
-    #editor { height: 1fr; background: #000000; color: #ffffff; }\n    #chat_log { height: 1fr; background: #000000; color: #ffffff; display: none; }
+    #editor_row { height: 1fr; }
+    #pane1 { width: 1fr; height: 1fr; border: solid #00e5ff; }
+    #pane2 { width: 1fr; height: 1fr; border: solid #ff7a00; display: none; }
+    #file1_title, #file2_title { height: 2; background: #000000; color: #39ff14; text-style: bold; content-align: center middle; }
+    #editor, #editor2 { height: 1fr; background: #000000; color: #ffffff; }
+    #chat_log { height: 1fr; background: #000000; color: #ffffff; display: none; }
     #user_input { dock: bottom; height: 3; background: #000000; color: #ffffff; border: solid #ff7a00; }
     Footer { background: #000000; color: #ffffff; }
     """
@@ -785,6 +790,9 @@ class CodexLocalApp(App):
         self._codex_busy = False
         self._codex_queue = []
         self._listed_paths = set()
+        self.secondary_path = None
+        self._reveal_states = []
+        self._reveal_timer = None
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -792,7 +800,13 @@ class CodexLocalApp(App):
             yield ListView(id="files")
             with Vertical(id="center"):
                 yield Static("CODEX • ÉCRITURE / GÉNÉRATION", id="editor_title")
-                yield TextArea("", id="editor", language="python", show_line_numbers=True)
+                with Horizontal(id="editor_row"):
+                    with Vertical(id="pane1"):
+                        yield Static("📄 FICHIER 1", id="file1_title")
+                        yield TextArea("", id="editor", language="python", show_line_numbers=True)
+                    with Vertical(id="pane2"):
+                        yield Static("📄 FICHIER 2", id="file2_title")
+                        yield TextArea("", id="editor2", language="python", show_line_numbers=True)
                 yield RichLog(id="chat_log", markup=True, wrap=True, auto_scroll=True)
             with Vertical(id="tools"):
                 yield Static("🛠 OUTILS")
@@ -801,6 +815,7 @@ class CodexLocalApp(App):
                 yield Button("🌐 PREVIEW", id="tool_preview")
                 yield Button("🔨 BUILD", id="tool_build")
                 yield Button("🧪 TESTS", id="tool_tests")
+                yield Button("⚡ RTX / OLLAMA", id="tool_gpu")
                 yield Button("💾 SAUVEGARDER", id="tool_save")
                 yield Button("📋 COPIER", id="tool_copy")
                 yield Button("📥 COLLER", id="tool_paste")
@@ -812,10 +827,9 @@ class CodexLocalApp(App):
         yield Input(placeholder="✍ CODEX LOCAL › écris ta commande ici…", id="user_input")
         yield Footer()
 
-    def _set_editor_language(self, path):
-        editor = self.query_one("#editor", TextArea)
+    def _language_for(self, path):
         ext = Path(path).suffix.lower()
-        languages = {
+        return {
             ".py": "python",
             ".js": "javascript",
             ".jsx": "javascript",
@@ -831,14 +845,18 @@ class CodexLocalApp(App):
             ".toml": "toml",
             ".sql": "sql",
             ".sh": "bash",
-        }
-        language = languages.get(ext)
+        }.get(ext)
+
+    def _set_editor_language(self, path, editor_id="#editor"):
+        editor = self.query_one(editor_id, TextArea)
+        language = self._language_for(path)
         editor.language = language if language in editor.available_languages else None
 
     def on_mount(self):
-        editor = self.query_one("#editor", TextArea)
-        editor.register_theme(TI_LEX_TEXTAREA_THEME)
-        editor.theme = "ti_lex_neon"
+        for editor_id in ("#editor", "#editor2"):
+            editor = self.query_one(editor_id, TextArea)
+            editor.register_theme(TI_LEX_TEXTAREA_THEME)
+            editor.theme = "ti_lex_neon"
         view = self.query_one("#files", ListView)
         for p in project_files():
             rel = p.relative_to(self.root)
@@ -852,16 +870,24 @@ class CodexLocalApp(App):
         p = getattr(event.item, "path", None)
         if p and p.is_file():
             self.current_path = p
-            self._set_editor_language(p)
+            self.secondary_path = None
+            self.query_one("#pane2").display = False
+            self._set_editor_language(p, "#editor")
             self.query_one("#editor", TextArea).text = p.read_text(encoding="utf-8", errors="replace")
-            self.query_one("#editor_title", Static).update("CODEX • ÉCRITURE / GÉNÉRATION  •  📄 " + p.name)
+            self.query_one("#file1_title", Static).update("📄 " + str(p.relative_to(self.root)))
+            self.query_one("#editor_title", Static).update("CODEX • ÉCRITURE / GÉNÉRATION")
             self.query_one("#editor", TextArea).focus()
 
     def action_save_file(self):
+        saved = []
         if self.current_path:
-            text = self.query_one("#editor", TextArea).text
-            self.current_path.write_text(text, encoding="utf-8")
-            self.notify("Sauvegardé : " + self.current_path.name)
+            self.current_path.write_text(self.query_one("#editor", TextArea).text, encoding="utf-8")
+            saved.append(self.current_path.name)
+        if self.secondary_path and self.query_one("#pane2").display:
+            self.secondary_path.write_text(self.query_one("#editor2", TextArea).text, encoding="utf-8")
+            saved.append(self.secondary_path.name)
+        if saved:
+            self.notify("Sauvegardé : " + " + ".join(saved))
 
     def on_input_submitted(self, event):
         cmd = event.value.strip()
@@ -1022,7 +1048,7 @@ class CodexLocalApp(App):
         try:
             engine = CodexEngine(self.root, model=config["model"])
             result = engine.build(request)
-            self.call_from_thread(self._finish_build, result, engine.last_content, engine.last_stats)
+            self.call_from_thread(self._finish_build, result, engine.last_outputs, engine.last_stats_by_file)
         except Exception as exc:
             self.call_from_thread(self._finish_build_error, str(exc))
 
@@ -1031,86 +1057,120 @@ class CodexLocalApp(App):
         self.query_one("#user_input", Input).focus()
         self._run_next_codex_command()
 
-    def _finish_build(self, result, generated_code, stats):
+    def _finish_build(self, result, outputs, stats_by_file):
         self.notify(result.message, severity="information" if result.ok else "error")
         if not result.ok:
             self.query_one("#user_input", Input).focus()
             self._run_next_codex_command()
             return
 
-        if result.changed:
-            target = (self.root / result.changed[-1]).resolve()
-            if target.is_file():
-                rel = str(target.relative_to(self.root)).replace("\\", "/")
-                if rel not in self._listed_paths:
-                    item = ListItem(Label("📄 " + rel))
-                    item.path = target
-                    self.query_one("#files", ListView).append(item)
-                    self._listed_paths.add(rel)
-
-                self.current_path = target
-                self._set_editor_language(target)
-                code = generated_code or target.read_text(encoding="utf-8", errors="replace")
-                self._start_code_reveal(code, stats)
-                return
-
-        self.query_one("#user_input", Input).focus()
-        self._run_next_codex_command()
-
-    def _start_code_reveal(self, code, stats=None):
-        if self._typing_timer:
-            self._typing_timer.stop()
-            self._typing_timer = None
-
-        self._typing_stats = stats or {"added": 0, "modified": 0, "deleted": 0}
-        self._typing_lines = code.splitlines(keepends=True)
-        self._typing_line_pos = 0
-        self.query_one("#editor", TextArea).text = ""
-
-        total = len(self._typing_lines)
-        if total > 400:
-            self._typing_line_chunk = 20
-        elif total > 160:
-            self._typing_line_chunk = 10
-        elif total > 60:
-            self._typing_line_chunk = 5
-        else:
-            self._typing_line_chunk = 2
-
-        self._typing_timer = self.set_interval(0.09, self._code_reveal_tick)
-
-    def _code_reveal_tick(self):
-        total = len(self._typing_lines)
-        if self._typing_line_pos >= total:
-            if self._typing_timer:
-                self._typing_timer.stop()
-                self._typing_timer = None
-            s = self._typing_stats
-            if self.current_path:
-                self.query_one("#editor_title", Static).update(
-                    "CODEX • SAUVEGARDÉ • 📄 " + self.current_path.name
-                    + f" • +{s['added']} ajoutées"
-                    + f" • ~{s['modified']} modifiées"
-                    + f" • -{s['deleted']} supprimées"
-                )
+        changed = list(result.changed[:2])
+        if not changed:
             self.query_one("#user_input", Input).focus()
             self._run_next_codex_command()
             return
 
-        self._typing_line_pos = min(
-            self._typing_line_pos + self._typing_line_chunk,
-            total,
-        )
-        visible = "".join(self._typing_lines[:self._typing_line_pos])
-        self.query_one("#editor", TextArea).text = visible
+        for rel in changed:
+            target = (self.root / rel).resolve()
+            if target.is_file() and rel not in self._listed_paths:
+                item = ListItem(Label("📄 " + rel))
+                item.path = target
+                self.query_one("#files", ListView).append(item)
+                self._listed_paths.add(rel)
 
-        if self.current_path:
-            s = self._typing_stats
-            self.query_one("#editor_title", Static).update(
-                "CODEX • ÉCRITURE FLUIDE • 📄 " + self.current_path.name
-                + f" • ligne {self._typing_line_pos}/{total}"
-                + f" • +{s['added']} ~{s['modified']} -{s['deleted']}"
+        self._start_multi_file_reveal(changed, outputs or {}, stats_by_file or {})
+
+    def _start_multi_file_reveal(self, changed, outputs, stats_by_file):
+        if self._reveal_timer:
+            self._reveal_timer.stop()
+            self._reveal_timer = None
+
+        self._reveal_states = []
+        editors = ["#editor", "#editor2"]
+        titles = ["#file1_title", "#file2_title"]
+        panes = ["#pane1", "#pane2"]
+
+        self.query_one("#pane2").display = len(changed) > 1
+        self.current_path = (self.root / changed[0]).resolve()
+        self.secondary_path = (self.root / changed[1]).resolve() if len(changed) > 1 else None
+
+        for index, rel in enumerate(changed[:2]):
+            path = (self.root / rel).resolve()
+            editor_id = editors[index]
+            editor = self.query_one(editor_id, TextArea)
+            self._set_editor_language(path, editor_id)
+            editor.text = ""
+            self.query_one(titles[index], Static).update("📄 " + rel)
+            self.query_one(panes[index]).display = True
+
+            code = outputs.get(rel)
+            if code is None and path.is_file():
+                code = path.read_text(encoding="utf-8", errors="replace")
+            code = code or ""
+            lines = code.splitlines(keepends=True)
+            total = len(lines)
+            if total > 500:
+                chunk = 18
+            elif total > 220:
+                chunk = 10
+            elif total > 80:
+                chunk = 5
+            else:
+                chunk = 2
+            self._reveal_states.append({
+                "rel": rel,
+                "path": path,
+                "editor_id": editor_id,
+                "lines": lines,
+                "pos": 0,
+                "chunk": chunk,
+                "stats": stats_by_file.get(rel, {"added": 0, "modified": 0, "deleted": 0}),
+            })
+
+        self.query_one("#editor_title", Static).update(
+            "CODEX • ÉCRITURE PROFESSIONNELLE • "
+            + ("2 FICHIERS EN PARALLÈLE" if len(changed) > 1 else "1 FICHIER")
+        )
+        self._reveal_timer = self.set_interval(0.10, self._multi_reveal_tick)
+
+    def _multi_reveal_tick(self):
+        all_done = True
+        progress_labels = []
+
+        for state in self._reveal_states:
+            total = len(state["lines"])
+            if state["pos"] < total:
+                all_done = False
+                start = state["pos"]
+                state["pos"] = min(state["pos"] + state["chunk"], total)
+                editor = self.query_one(state["editor_id"], TextArea)
+                editor.text = editor.text + "".join(state["lines"][start:state["pos"]])
+
+                # Garde le curseur et la vue au bas du code pendant l'écriture.
+                try:
+                    last_row = max(0, len(editor.text.splitlines()) - 1)
+                    editor.move_cursor((last_row, 0))
+                    editor.scroll_cursor_visible()
+                except Exception:
+                    pass
+
+            progress_labels.append(
+                state["rel"] + f" {state['pos']}/{max(1, total)} lignes"
             )
+
+        self.query_one("#editor_title", Static).update(
+            "CODEX • ÉCRITURE FLUIDE • " + "  |  ".join(progress_labels)
+        )
+
+        if all_done:
+            if self._reveal_timer:
+                self._reveal_timer.stop()
+                self._reveal_timer = None
+            self.query_one("#editor_title", Static).update(
+                "CODEX • SAUVEGARDÉ • " + "  |  ".join(s["rel"] for s in self._reveal_states)
+            )
+            self.query_one("#user_input", Input).focus()
+            self._run_next_codex_command()
 
     def _start_typing(self, code, stats=None):
         if self._typing_timer:
@@ -1214,6 +1274,44 @@ class CodexLocalApp(App):
         self.notify("Ligne collée")
         editor.focus()
 
+    def _gpu_diagnostic_background(self):
+        try:
+            gpu = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,memory.total,utilization.gpu", "--format=csv,noheader"],
+                capture_output=True, text=True, timeout=10,
+            )
+            gpu_text = gpu.stdout.strip() if gpu.returncode == 0 else "NVIDIA non détectée"
+            ollama = subprocess.run(
+                ["ollama", "ps"], capture_output=True, text=True, timeout=10,
+            )
+            ollama_text = ollama.stdout.strip() if ollama.returncode == 0 else "Ollama non disponible"
+
+            started = time.perf_counter()
+            try:
+                response = requests.post(
+                    "http://127.0.0.1:11434/api/generate",
+                    json={
+                        "model": config["model"],
+                        "prompt": "Réponds uniquement: GPU TEST OK",
+                        "stream": False,
+                        "options": {"num_predict": 12, "temperature": 0},
+                    },
+                    timeout=60,
+                )
+                response.raise_for_status()
+                elapsed = time.perf_counter() - started
+                speed = f"Test IA local: {elapsed:.2f}s"
+            except Exception as exc:
+                speed = "Test IA impossible: " + str(exc)
+
+            result = gpu_text + "\n" + speed + "\n" + ollama_text
+            self.call_from_thread(self._show_gpu_result, result)
+        except Exception as exc:
+            self.call_from_thread(self._show_gpu_result, "Diagnostic GPU impossible: " + str(exc))
+
+    def _show_gpu_result(self, result):
+        self.notify(result, title="RTX / OLLAMA", timeout=12)
+
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
             self.action_save_file()
@@ -1236,6 +1334,9 @@ class CodexLocalApp(App):
             self.action_paste_whole_file()
         elif event.button.id == "tool_zip":
             self._create_project_zip()
+        elif event.button.id == "tool_gpu":
+            self.notify("Diagnostic RTX / Ollama en cours…")
+            self.run_worker(self._gpu_diagnostic_background, thread=True, exclusive=False)
         elif event.button.id == "tool_run":
             self.action_save_file()
             if self.current_path and self.current_path.suffix == ".py":
