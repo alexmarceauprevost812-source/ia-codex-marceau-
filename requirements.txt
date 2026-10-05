@@ -2,3 +2,4 @@ rich>=13.7.0
 pygments>=2.17.0
 requests>=2.31.0
 prompt_toolkit>=3.0.43
+textual>=0.89.0
