@@ -761,64 +761,8 @@ def codex_local_lab():
     if not active_project:
         console.print("[tilex.warning]Sélectionne d'abord un projet avec 01 ou crée-en un avec 02.[/]")
         return
-
-    current_file = None
-    while True:
-        console.clear()
-        show_logo()
-        show_codex_workspace(current_file)
-        console.print(
-            "[#39FF14]📄 OUVRIR[/]  [bright_cyan]🤖 IA[/]  [bright_white]▶️ RUN[/]  "
-            "[bright_white]🔎 RECHERCHE[/]  [bright_white]🖼️ IMAGES[/]  "
-            "[bright_white]📊 ÉTAT[/]  [dark_orange]⚙️ MENU[/]  [#FF1744]↩ RETOUR[/]"
-        )
-        console.print(
-            "[dim]Commandes : ouvrir | ia | run | recherche | images | etat | menu | retour[/]"
-        )
-        cmd = session.prompt("CODEX LOCAL › ").strip()
-
-        if cmd in ("retour", "/retour", "00"):
-            return
-        elif cmd in ("ouvrir", "fichier", "files"):
-            show_project_files()
-            name = session.prompt("Fichier › ").strip()
-            if name:
-                p = project_path(name)
-                if p.is_file():
-                    current_file = name
-                else:
-                    console.print("[tilex.error]Fichier introuvable.[/]")
-                    session.prompt("Entrée pour continuer › ")
-        elif cmd in ("ia", "codex"):
-            q = session.prompt("🤖 CODEX › ").strip()
-            if q:
-                ollama(project_context() + "\nFichier actif: " + (current_file or "(aucun)") + "\nDemande: " + q)
-                session.prompt("Entrée pour continuer › ")
-        elif cmd == "run":
-            name = current_file or session.prompt("Fichier Python › ").strip()
-            if name:
-                run_file(name)
-                session.prompt("Entrée pour continuer › ")
-        elif cmd in ("recherche", "chercher"):
-            term = session.prompt("Texte à rechercher › ").strip()
-            search_project(term)
-            session.prompt("Entrée pour continuer › ")
-        elif cmd in ("images", "image"):
-            images_lab()
-        elif cmd in ("etat", "status"):
-            show_project_status()
-            session.prompt("Entrée pour continuer › ")
-        elif cmd == "menu":
-            console.print(
-                "[bright_white]🌐 Preview   🔨 Build   🧪 Tests   📜 Logs   "
-                "📦 Dépendances   🔀 Git   💾 Sauvegardes   ⚙️ Settings[/]"
-            )
-            console.print("[tilex.warning]Ces modules avancés seront branchés progressivement.[/]")
-            session.prompt("Entrée pour continuer › ")
-        elif cmd:
-            # Le prompt principal de CODEX LOCAL sert aussi directement à parler à l'IA.
-            ollama(project_context() + "\nFichier actif: " + (current_file or "(aucun)") + "\nDemande: " + cmd)
-            session.prompt("Entrée pour continuer › ")
+    app = CodexLocalApp(active_project)
+    app.run()
 
 
 def show_dev_menu():
