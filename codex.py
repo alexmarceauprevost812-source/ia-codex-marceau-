@@ -18,6 +18,10 @@ from rich.text import Text
 from rich.theme import Theme
 from rich.highlighter import RegexHighlighter
 from prompt_toolkit import PromptSession
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Header, Footer, ListView, ListItem, Label, TextArea, Input, Button, Static
+from textual.binding import Binding
 
 from config import FONTS, load_config, save_config
 
