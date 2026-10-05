@@ -765,6 +765,9 @@ class CodexLocalApp(App):
         self._typing_stats = {"added": 0, "modified": 0, "deleted": 0}
         self.mode = "codex"
         self.chat_history = []
+        self._chat_typing_text = ""
+        self._chat_typing_pos = 0
+        self._chat_typing_timer = None
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -877,25 +880,43 @@ class CodexLocalApp(App):
             self.notify("CODEX travaille en arrière-plan…")
             self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=True)
 
-    def _render_chat(self):
+    def _style_chat_message(self, prefix, message, user=False):
+        line = Text(prefix, style="bold #FF7A00" if user else "bold #00E5FF")
+        if user:
+            line.append(message, style="#FFFFFF")
+            return line
+
+        swear_pattern = re.compile(
+            r"\\b(tabarnak|tabarnac|tabarnouche|c[âa]lice|calisse|c[âa]lisse|crisse|esti|osti|sacrament|viarge)\\b",
+            re.IGNORECASE,
+        )
+        chunks = message.split("`")
+        for index, chunk in enumerate(chunks):
+            if index % 2:
+                line.append(chunk, style="bold #FF7A00")
+                continue
+            pos = 0
+            for match in swear_pattern.finditer(chunk):
+                if match.start() > pos:
+                    line.append(chunk[pos:match.start()], style="#87CEFA")
+                line.append(match.group(0), style="bold #FF1744")
+                pos = match.end()
+            if pos < len(chunk):
+                line.append(chunk[pos:], style="#87CEFA")
+        return line
+
+    def _render_chat(self, partial_ai=None):
         log = self.query_one("#chat_log", RichLog)
         log.clear()
         log.write(Text("=== TI-LEX CHAT IA ===", style="bold #39FF14"))
-        colors = ["#39FF14", "#00E5FF", "#D65CFF", "#FFFF00", "#FF1493", "#FF7A00"]
         for who, message in self.chat_history[-30:]:
-            line = Text()
-            if who == "TOI":
-                line.append("TOI › ", style="bold #FF7A00")
-                line.append(message, style="#FFFFFF")
-            else:
-                line.append("IA › ", style="bold #00E5FF")
-                chunks = message.split("`")
-                for n, chunk in enumerate(chunks):
-                    if n % 2:
-                        line.append(chunk, style="bold #FF7A00")
-                    else:
-                        line.append(chunk, style="#87CEFA")
-            log.write(line)
+            log.write(self._style_chat_message(
+                "TOI › " if who == "TOI" else "IA › ",
+                message,
+                user=(who == "TOI"),
+            ))
+        if partial_ai is not None:
+            log.write(self._style_chat_message("IA › ", partial_ai, user=False))
 
     def _chat_in_background(self, message):
         history = "\n".join(who + ": " + text for who, text in self.chat_history[-12:])
@@ -924,12 +945,35 @@ class CodexLocalApp(App):
     def _finish_chat(self, answer):
         if self.mode != "chat":
             return
+        if self._chat_typing_timer:
+            self._chat_typing_timer.stop()
+        self._chat_typing_text = answer
+        self._chat_typing_pos = 0
         self.query_one("#editor_title", Static).update(
-            "CHAT IA • RÉPONSE NÉON 1.3x • /codex POUR REVENIR"
+            "CHAT IA • ÉCRITURE FLUIDE • /codex POUR REVENIR"
         )
-        self._start_typing(answer)
-        self.chat_history.append(("IA", answer))
+        self._chat_typing_timer = self.set_interval(0.035, self._chat_typing_tick)
         self.query_one("#user_input", Input).focus()
+
+    def _chat_typing_tick(self):
+        if self.mode != "chat":
+            if self._chat_typing_timer:
+                self._chat_typing_timer.stop()
+                self._chat_typing_timer = None
+            return
+        if self._chat_typing_pos >= len(self._chat_typing_text):
+            if self._chat_typing_timer:
+                self._chat_typing_timer.stop()
+                self._chat_typing_timer = None
+            self.chat_history.append(("IA", self._chat_typing_text))
+            self._render_chat()
+            self.query_one("#editor_title", Static).update(
+                "CHAT IA • PRÊT • /codex POUR REVENIR"
+            )
+            return
+        self._chat_typing_pos = min(self._chat_typing_pos + 2, len(self._chat_typing_text))
+        self._render_chat(self._chat_typing_text[:self._chat_typing_pos])
+
 
     def _build_in_background(self, request):
         engine = CodexEngine(self.root, model=config["model"])
