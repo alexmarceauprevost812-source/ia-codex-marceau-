@@ -445,11 +445,93 @@ Retourne uniquement le contenu final complet du fichier."""
 
         return content
 
+    def _try_fast_patch(self, target: str, request: str, old_content: str) -> str | None:
+        """Tente une modification ciblée pour éviter de régénérer tout le fichier."""
+        if not old_content or len(old_content) > 14000:
+            return None
+
+        lower = request.lower()
+        full_rewrite_words = (
+            "réécris tout", "reecris tout", "remplace tout", "refais tout",
+            "rewrite all", "replace all", "nouveau fichier", "new file",
+        )
+        if any(word in lower for word in full_rewrite_words):
+            return None
+
+        prompt = f"""Tu es le mode PATCH RAPIDE de TI-LEX CODEX.
+
+Fichier cible: {target}
+Demande: {request}
+
+CONTENU ACTUEL:
+{old_content}
+
+Réponds UNIQUEMENT en JSON valide avec cette structure:
+{{
+  "replacements": [
+    {{
+      "old": "texte EXACT présent dans le fichier",
+      "new": "texte de remplacement"
+    }}
+  ]
+}}
+
+Règles:
+- Fais le minimum de remplacements nécessaires.
+- "old" doit être copié EXACTEMENT depuis le contenu actuel.
+- Maximum 4 remplacements.
+- Ne renvoie jamais le fichier complet.
+- Ne renvoie aucun Markdown ni explication.
+- Si la modification ciblée est impossible proprement, réponds {{"replacements":[]}}.
+"""
+        self.status(f"⚡ PATCH RAPIDE • {target}")
+        try:
+            payload = self._json(self._ask(prompt, temperature=0.05, json_mode=True))
+        except Exception:
+            return None
+
+        replacements = payload.get("replacements", []) if isinstance(payload, dict) else []
+        if not isinstance(replacements, list) or not replacements or len(replacements) > 4:
+            return None
+
+        updated = old_content
+        for item in replacements:
+            if not isinstance(item, dict):
+                return None
+            old = str(item.get("old", ""))
+            new = str(item.get("new", ""))
+            if not old or old not in updated:
+                return None
+            # Un patch doit viser une occurrence non ambiguë.
+            if updated.count(old) != 1:
+                return None
+            updated = updated.replace(old, new, 1)
+
+        if updated == old_content:
+            return None
+
+        valid, error = self._validate_generated_content(target, updated)
+        if not valid:
+            self.status(f"🧪 PATCH invalide • bascule génération complète • {error}")
+            return None
+
+        self.status(f"✅ PATCH RAPIDE appliqué • {target}")
+        return updated
+
     def generate_task(self, request: str, task: dict) -> list[dict]:
         targets = [str(x) for x in task.get("files", [])][:1]
         if not targets:
             raise ValueError("Tâche sans fichier cible")
         target = targets[0]
+        target_path = self._safe(target)
+        old_content = target_path.read_text(encoding="utf-8", errors="replace") if target_path.is_file() else ""
+
+        # Pour une petite modification d'un fichier existant, un patch ciblé évite
+        # de faire générer inutilement le fichier complet par le modèle.
+        patched = self._try_fast_patch(target, request, old_content)
+        if patched is not None:
+            return [{"path": target, "content": patched}]
+
         needs = [str(x) for x in task.get("needs", [])][:6]
         related = self.relevant_files(request, max_files=2)
         context_paths = list(dict.fromkeys([target] + needs + related))
@@ -485,8 +567,6 @@ MODE LABORATOIRE TI-LEX:
             max_repairs=2,
         )
 
-        target_path = self._safe(target)
-        old_content = target_path.read_text(encoding="utf-8", errors="replace") if target_path.is_file() else ""
         old_lines = old_content.splitlines()
         new_lines = content.splitlines()
         destructive_words = (
