@@ -463,6 +463,108 @@ def show_readme():
         border_style="#39FF14"
     ))
 
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
+
+def project_images_dir():
+    if not active_project:
+        return None
+    folder = active_project / "assets" / "images"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+def list_project_images():
+    folder = project_images_dir()
+    if folder is None:
+        console.print("[tilex.warning]Aucun projet actif.[/]")
+        return []
+    images = sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS)
+    table = Table(title="CODEX LOCAL • IMAGES", border_style="#39FF14")
+    table.add_column("#", style="dark_orange")
+    table.add_column("Image", style="#39FF14")
+    table.add_column("Format", style="bright_cyan")
+    table.add_column("Taille", style="bright_white")
+    for n, p in enumerate(images, 1):
+        table.add_row(str(n), p.name, p.suffix.lower().lstrip(".").upper(), f"{p.stat().st_size / 1024:.1f} KB")
+    console.print(table if images else "[tilex.warning]Aucune image dans assets/images.[/]")
+    return images
+
+def import_project_image():
+    folder = project_images_dir()
+    if folder is None:
+        console.print("[tilex.warning]Aucun projet actif.[/]")
+        return
+    raw = session.prompt("Chemin de l'image sur ton ordinateur › ").strip().strip('"')
+    source = Path(raw).expanduser()
+    if not source.is_file():
+        console.print("[tilex.error]Image introuvable.[/]")
+        return
+    if source.suffix.lower() not in IMAGE_EXTENSIONS:
+        console.print("[tilex.error]Format non accepté. Utilise PNG, JPG, JPEG, WEBP, GIF, BMP ou SVG.[/]")
+        return
+    target = folder / source.name
+    if target.exists():
+        console.print("[tilex.warning]Une image avec ce nom existe déjà. Import annulé.[/]")
+        return
+    shutil.copy2(source, target)
+    relative = target.relative_to(active_project)
+    console.print(f"[tilex.success]✓ Image ajoutée : {relative}[/]")
+    console.print(f"[tilex.info]Chemin pour ton code : {relative.as_posix()}[/]")
+
+def image_info():
+    images = list_project_images()
+    if not images:
+        return
+    try:
+        n = int(session.prompt("Numéro de l'image › ").strip())
+    except ValueError:
+        console.print("[tilex.error]Numéro invalide.[/]")
+        return
+    if not 1 <= n <= len(images):
+        console.print("[tilex.error]Numéro invalide.[/]")
+        return
+    p = images[n - 1]
+    rel = p.relative_to(active_project)
+    table = Table(title=f"IMAGE • {p.name}", border_style="bright_cyan")
+    table.add_column("INFO", style="dark_orange")
+    table.add_column("VALEUR", style="#39FF14")
+    table.add_row("Nom", p.name)
+    table.add_row("Format", p.suffix.lower().lstrip(".").upper())
+    table.add_row("Taille", f"{p.stat().st_size / 1024:.1f} KB")
+    table.add_row("Chemin local", str(p))
+    table.add_row("Chemin code", rel.as_posix())
+    console.print(table)
+
+def images_lab():
+    while True:
+        console.print(Panel(
+            "[dark_orange][01][/] [bright_white]AJOUTER UNE IMAGE[/]\n"
+            "[dark_orange][02][/] [bright_white]VOIR LES IMAGES DU PROJET[/]\n"
+            "[dark_orange][03][/] [bright_white]INFORMATIONS D'UNE IMAGE[/]\n"
+            "[dark_orange][04][/] [bright_white]CHEMINS POUR LE CODE[/]\n"
+            "[dark_orange][05][/] [bright_white]VISION IA LOCALE[/]\n"
+            "[dark_orange][00][/] [#39FF14]RETOUR AU LABORATOIRE[/]",
+            title="[#39FF14]CODEX LOCAL • IMAGES / ASSETS[/]",
+            border_style="#39FF14"
+        ))
+        choice = session.prompt("IMAGE › ").strip()
+        if choice == "00":
+            return
+        if choice == "01":
+            import_project_image()
+        elif choice == "02":
+            list_project_images()
+        elif choice == "03":
+            image_info()
+        elif choice == "04":
+            images = list_project_images()
+            for p in images:
+                console.print(f"[tilex.info]{p.relative_to(active_project).as_posix()}[/]")
+        elif choice == "05":
+            console.print("[tilex.warning]VISION IA LOCALE : nécessite un modèle Ollama multimodal. Branchement prévu à l'étape suivante.[/]")
+        else:
+            console.print("[tilex.warning]Choix invalide.[/]")
+
+
 def codex_local_lab():
     if not active_project:
         console.print("[tilex.warning]Sélectionne d'abord un projet avec 01 ou crée-en un avec 02.[/]")
@@ -485,6 +587,7 @@ def codex_local_lab():
             "[dark_orange][13][/] [bright_white]SNAPSHOTS / SAUVEGARDES[/]\n"
             "[dark_orange][14][/] [bright_white]ÉTAT DU PROJET[/]\n"
             "[dark_orange][15][/] [bright_white]SETTINGS[/]\n"
+            "[dark_orange][16][/] [bright_white]IMAGES / ASSETS[/]\n"
             "[dark_orange][00][/] [#39FF14]RETOUR AU MENU PRINCIPAL[/]\n\n"
             f"[#39FF14]PROJET › {active_project.name}[/]\n"
             f"[bright_cyan]LOCAL › {active_project}[/]",
@@ -528,6 +631,8 @@ def codex_local_lab():
             search_project(term)
         elif choice == "14":
             show_project_status()
+        elif choice == "16":
+            images_lab()
         else:
             console.print("[tilex.warning]Choix invalide.[/]")
 
