@@ -579,47 +579,68 @@ def main():
     if not (Path.home() / ".ti_lex_codex" / "config.json").exists():
         choose_font()
 
-    startup_menu()
-    console.print(f"[tilex.success]✓ MODE CODEX • PROJET : {active_project.name}[/]")
-    console.print("[tilex.info]Écris directement ce que tu veux coder. /aide pour les commandes, /chat pour discuter.[/]")
+    console.print("[tilex.info]Bienvenue dans TI-LEX CODEX. Sélectionne une option du menu développeur.[/]")
     show_dev_menu()
 
     while True:
-        cmd = session.prompt(f"TI-LEX CODEX [{active_project.name}] › ").strip()
+        project_label = active_project.name if active_project else "AUCUN-PROJET"
+        cmd = session.prompt(f"TI-LEX CODEX [{project_label}] › ").strip()
         if not cmd:
             continue
 
-        if cmd in ("/quitter", "-quitter"):
+        if cmd in ("00", "/quitter", "-quitter"):
             break
-        elif cmd in ("/aide", "-aide"):
-            console.print(Panel(HELP, title="TI-LEX CODEX • AIDE", border_style="medium_purple1"))
-        elif cmd in ("/chat", "-chat"):
-            console.print("[tilex.info]MODE CHAT • /retour pour revenir au projet[/]")
-            chat_loop(False)
-            console.print(f"[tilex.success]Retour au projet : {active_project.name}[/]")
-        elif cmd in ("/nouveau",):
-            name = session.prompt("Nom du projet › ").strip()
-            create_project(name)
-        elif cmd in ("/projets", "-projets"):
-            old = active_project
+        elif cmd in ("01", "/projets", "-projets"):
             active_project = None
             startup_menu()
-            if active_project is None:
-                active_project = old
-        elif cmd in ("/supprimer", "-supprimer"):
+            show_dev_menu()
+        elif cmd in ("02", "/nouveau", "-nouveau"):
+            name = session.prompt("Nom du projet › ").strip()
+            create_project(name)
+            show_dev_menu()
+        elif cmd in ("03", "/fichiers", "-fichiers"):
+            if active_project:
+                show_project_files()
+            else:
+                console.print("[tilex.warning]Sélectionne d'abord un projet avec 01 ou crée-en un avec 02.[/]")
+        elif cmd in ("04", "/chat", "-chat"):
+            console.print("[tilex.info]MODE CHAT • /retour pour revenir au projet[/]")
+            chat_loop(False)
+            show_dev_menu()
+        elif cmd == "05":
+            if not active_project:
+                console.print("[tilex.warning]Sélectionne d'abord un projet.[/]")
+            else:
+                filename = session.prompt("Fichier Python à exécuter › ").strip()
+                run_file(filename)
+        elif cmd == "06":
+            if not active_project:
+                console.print("[tilex.warning]Sélectionne d'abord un projet.[/]")
+            else:
+                term = session.prompt("Texte à rechercher › ").strip()
+                search_project(term)
+        elif cmd == "07":
+            console.print("[tilex.warning]Module TESTS en préparation.[/]")
+        elif cmd == "08":
+            console.print("[tilex.warning]Module DÉPENDANCES en préparation.[/]")
+        elif cmd == "09":
+            console.print("[tilex.warning]Module GIT LOCAL en préparation.[/]")
+        elif cmd in ("10", "/etat", "-etat"):
+            if active_project:
+                show_project_status()
+            else:
+                console.print("[tilex.warning]Aucun projet actif.[/]")
+        elif cmd == "11":
+            console.print("[tilex.warning]Module HISTORIQUE / SAUVEGARDES en préparation.[/]")
+        elif cmd in ("12", "/police", "-police"):
+            choose_font()
+        elif cmd in ("13", "/supprimer", "-supprimer"):
             delete_project()
-            if active_project is None:
-                startup_menu()
-        elif cmd in ("/etat", "-etat"):
-            show_project_status()
-        elif cmd in ("/fichiers", "-fichiers"):
-            show_project_files()
-        elif cmd.startswith("/chercher ") or cmd.startswith("-chercher "):
-            search_project(cmd.split(" ", 1)[1])
+            show_dev_menu()
+        elif cmd in ("14", "/aide", "-aide"):
+            console.print(Panel(HELP, title="TI-LEX CODEX • AIDE", border_style="#39FF14"))
         elif cmd in ("/menu", "-menu"):
             show_dev_menu()
-        elif cmd in ("/police", "-police"):
-            choose_font()
         elif cmd.startswith("/ouvrir ") or cmd.startswith("-ouvrir "):
             show_file(cmd.split(" ", 1)[1].strip())
         elif cmd.startswith("/explique ") or cmd.startswith("-explique "):
@@ -628,12 +649,17 @@ def main():
             ai_file(cmd.split(" ", 1)[1].strip(), "Analyse les erreurs et propose une version corrigée de")
         elif cmd.startswith("/run ") or cmd.startswith("-run "):
             run_file(cmd.split(" ", 1)[1].strip())
+        elif cmd.startswith("/chercher ") or cmd.startswith("-chercher "):
+            search_project(cmd.split(" ", 1)[1])
         elif cmd.startswith("-projet "):
             create_project(cmd[8:].strip())
         elif cmd.startswith("-selection "):
             select_project(cmd[11:].strip())
         else:
-            ollama(project_context() + "\nDemande de l'utilisateur dans le projet actif : " + cmd)
+            if not active_project:
+                console.print("[tilex.warning]Choisis 01 pour continuer un projet ou 02 pour en créer un.[/]")
+            else:
+                ollama(project_context() + "\nDemande de l'utilisateur dans le projet actif : " + cmd)
 
 if __name__ == "__main__":
     main()
