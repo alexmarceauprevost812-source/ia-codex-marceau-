@@ -765,6 +765,8 @@ class CodexLocalApp(App):
     Footer { background: #000000; color: #ffffff; }
     """
     BINDINGS = [
+        Binding("ctrl+c", "copy_safe", "Copier", priority=True),
+        Binding("ctrl+v", "paste_safe", "Coller", priority=True),
         Binding("ctrl+s", "save_file", "Sauvegarder"),
         Binding("ctrl+shift+c", "copy_current_line", "Copier ligne"),
         Binding("ctrl+shift+v", "paste_current_line", "Coller ligne"),
@@ -1260,6 +1262,29 @@ class CodexLocalApp(App):
                     archive.write(src, rel)
         self.notify("ZIP créé : " + str(zip_path.name))
 
+    def action_copy_safe(self):
+        editor = self.focused if isinstance(self.focused, TextArea) else self.query_one("#editor", TextArea)
+        try:
+            if editor.selected_text:
+                editor.action_copy()
+                self.notify("Sélection copiée • TI-LEX reste ouvert")
+            else:
+                editor.select_all()
+                editor.action_copy()
+                self.notify("Fichier complet copié • TI-LEX reste ouvert")
+        except Exception as exc:
+            self.notify("Copie impossible: " + str(exc), severity="error")
+        editor.focus()
+
+    def action_paste_safe(self):
+        editor = self.focused if isinstance(self.focused, TextArea) else self.query_one("#editor", TextArea)
+        try:
+            editor.action_paste()
+            self.notify("Code collé • TI-LEX reste ouvert")
+        except Exception as exc:
+            self.notify("Collage impossible: " + str(exc), severity="error")
+        editor.focus()
+
     def action_copy_current_line(self):
         editor = self.query_one("#editor", TextArea)
         row, _column = editor.cursor_location
@@ -1316,14 +1341,9 @@ class CodexLocalApp(App):
         if event.button.id == "tool_save":
             self.action_save_file()
         elif event.button.id == "tool_copy":
-            editor = self.query_one("#editor", TextArea)
-            editor.action_copy()
-            self.notify("Code copié")
+            self.action_copy_safe()
         elif event.button.id == "tool_paste":
-            editor = self.query_one("#editor", TextArea)
-            editor.action_paste()
-            editor.focus()
-            self.notify("Code collé")
+            self.action_paste_safe()
         elif event.button.id == "tool_copy_line":
             self.action_copy_current_line()
         elif event.button.id == "tool_paste_line":
