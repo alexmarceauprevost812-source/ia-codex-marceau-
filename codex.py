@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.style import Style
 from pygments.style import Style as PygmentsStyle
-from pygments.token import Text, Whitespace, Comment, Keyword, Name, Number, Operator, String, Punctuation, Generic, Error
+from pygments.token import Text as PygmentsText, Whitespace, Comment, Keyword, Name, Number, Operator, String, Punctuation, Generic, Error
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
@@ -24,7 +24,7 @@ class TILexCodeStyle(PygmentsStyle):
     background_color = "#0d1117"
     highlight_color = "#263040"
     styles = {
-        Text: "#EAF6FF",
+        PygmentsText: "#EAF6FF",
         Whitespace: "#EAF6FF",
         Error: "bold #FF1744",
         Comment: "italic #7D8590",
