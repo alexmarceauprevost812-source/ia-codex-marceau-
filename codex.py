@@ -136,7 +136,7 @@ def print_ai_response(text):
         found = True
         prose = text[pos:match.start()].strip()
         if prose:
-            console.print(prose, style="tilex.value", highlight=True)
+            fluid(prose, delay=0.025)
 
         language = (match.group(1) or "python").lower()
         aliases = {
@@ -146,18 +146,20 @@ def print_ai_response(text):
         }
         language = aliases.get(language, language)
         code = match.group(2).rstrip()
-        console.print(Panel(
+        rendered = Panel(
             Syntax(code, language, theme=CODE_STYLE, line_numbers=True,
                    word_wrap=False, background_color="default"),
             title=f"[tilex.action]CODE • {language.upper()}[/]",
             border_style="bright_cyan",
-        ))
+        )
+        time.sleep(0.12)
+        console.print(rendered)
         pos = match.end()
 
     if found:
         tail = text[pos:].strip()
         if tail:
-            console.print(tail, style="tilex.value", highlight=True)
+            fluid(tail, delay=0.025)
         return
 
     # 2) Secours : si le modèle oublie les backticks mais la réponse ressemble
@@ -168,14 +170,16 @@ def print_ai_response(text):
     )
     score = sum(1 for signal in python_signals if signal in text)
     if score >= 2:
-        console.print(Panel(
+        rendered = Panel(
             Syntax(text.strip(), "python", theme=CODE_STYLE, line_numbers=True,
                    word_wrap=False, background_color="default"),
             title="[tilex.action]CODE • PYTHON[/]",
             border_style="bright_cyan",
-        ))
+        )
+        time.sleep(0.12)
+        console.print(rendered)
     else:
-        console.print(text.strip(), style="tilex.value", highlight=True)
+        fluid(text.strip(), delay=0.025)
 
 def ollama(prompt):
     model = config["model"]
