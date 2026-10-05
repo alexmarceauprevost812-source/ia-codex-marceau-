@@ -21,7 +21,7 @@ from prompt_toolkit import PromptSession
 from textual.app import App, ComposeResult
 from codex_engine import CodexEngine
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Header, Footer, ListView, ListItem, Label, TextArea, Input, Button, Static
+from textual.widgets import Header, Footer, ListView, ListItem, Label, TextArea, Input, Button, Static, RichLog
 from textual.binding import Binding
 
 from config import FONTS, load_config, save_config
@@ -718,7 +718,7 @@ class CodexLocalApp(App):
     #tools Button { width: 100%; height: 3; margin: 0; background: #000000; color: #ffffff; border: none; }
     #tools Button:focus { background: #001a00; color: #39ff14; text-style: bold; }
     #editor_title { height: 3; background: #000000; content-align: center middle; color: #39ff14; text-style: bold; }
-    #editor { height: 1fr; background: #000000; color: #ffffff; }
+    #editor { height: 1fr; background: #000000; color: #ffffff; }\n    #chat_log { height: 1fr; background: #000000; color: #ffffff; display: none; }
     #user_input { dock: bottom; height: 3; background: #000000; color: #ffffff; border: solid #ff7a00; }
     Footer { background: #000000; color: #ffffff; }
     """
@@ -740,7 +740,7 @@ class CodexLocalApp(App):
             yield ListView(id="files")
             with Vertical(id="center"):
                 yield Static("CODEX • ÉCRITURE / GÉNÉRATION", id="editor_title")
-                yield TextArea("", id="editor", language="python", show_line_numbers=True)
+                yield TextArea("", id="editor", language="python", show_line_numbers=True)\n                yield RichLog(id="chat_log", markup=True, wrap=True, auto_scroll=True)
             with Vertical(id="tools"):
                 yield Static("🛠 OUTILS")
                 yield Button("🤖 IA", id="tool_ai")
