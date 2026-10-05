@@ -702,6 +702,61 @@ def images_lab():
             console.print("[tilex.warning]Choix invalide.[/]")
 
 
+
+class CodexLocalApp(App):
+    CSS = """
+    Screen { background: #0d1117; color: white; }
+    #brand { height: 3; color: #39ff14; text-style: bold; content-align: center middle; border: solid #00e5ff; }
+    #workspace { height: 1fr; }
+    #files { width: 25%; border: solid #39ff14; }
+    #center { width: 1fr; border: solid #00e5ff; }
+    #editor_title { height: 3; content-align: center middle; color: #39ff14; text-style: bold; }
+    #editor { height: 1fr; }
+    #user_input { dock: bottom; height: 3; border: solid #ff7a00; }
+    """
+    BINDINGS = [Binding("ctrl+s", "save_file", "Sauvegarder"), Binding("escape", "quit", "Retour")]
+
+    def __init__(self, root):
+        super().__init__()
+        self.root = Path(root).resolve()
+        self.current_path = None
+
+    def compose(self) -> ComposeResult:
+        yield Static("TI-LEX CODEX  •  LOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
+        with Horizontal(id="workspace"):
+            yield ListView(id="files")
+            with Vertical(id="center"):
+                yield Static("CODEX • ÉCRITURE / GÉNÉRATION", id="editor_title")
+                yield TextArea("", id="editor", language="python", show_line_numbers=True)
+        yield Input(placeholder="✍ CODEX LOCAL › écris ta commande ici…", id="user_input")
+        yield Footer()
+
+    def on_mount(self):
+        view = self.query_one("#files", ListView)
+        for p in project_files():
+            rel = p.relative_to(self.root)
+            item = ListItem(Label("📄 " + str(rel)))
+            item.path = p
+            view.append(item)
+
+    def on_list_view_selected(self, event):
+        self.action_save_file()
+        p = getattr(event.item, "path", None)
+        if p and p.is_file():
+            self.current_path = p
+            self.query_one("#editor", TextArea).text = p.read_text(encoding="utf-8", errors="replace")
+            self.query_one("#editor_title", Static).update("CODEX • ÉCRITURE / GÉNÉRATION  •  📄 " + p.name)
+            self.query_one("#editor", TextArea).focus()
+
+    def action_save_file(self):
+        if self.current_path:
+            text = self.query_one("#editor", TextArea).text
+            self.current_path.write_text(text, encoding="utf-8")
+            self.notify("Sauvegardé : " + self.current_path.name)
+
+    def on_unmount(self):
+        self.action_save_file()
+
 def codex_local_lab():
     if not active_project:
         console.print("[tilex.warning]Sélectionne d'abord un projet avec 01 ou crée-en un avec 02.[/]")
