@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import difflib
+import ast
 import re
 import shutil
 import time
@@ -138,7 +139,7 @@ class CodexEngine:
 
         # 2) Nom de fichier explicite avec extension connue: priorité absolue.
         match = re.search(
-            r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|js|jsx|ts|tsx|html|css|json|md|txt|toml|ya?ml|sql|sh|ps1))",
+            r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|pyw|js|jsx|mjs|cjs|ts|tsx|html?|css|scss|json|md|txt|toml|ya?ml|sql|sh|bash|zsh|ps1|bat|cmd|c|h|cpp|hpp|cc|java|go|rs|php|rb|lua|xml|ini|cfg|env))",
             raw,
         )
         if match:
@@ -207,6 +208,38 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche pa
                 pass
         return backup
 
+    def _validate_generated_content(self, target: str, content: str):
+        """Valide le langage et la syntaxe avant d'écrire un fichier."""
+        suffix = Path(target).suffix.lower()
+        stripped = content.lstrip()
+
+        if suffix == ".py":
+            if stripped.lower().startswith(("<!doctype html", "<html", "<script", "<style")):
+                return False, "Le modèle a généré du HTML au lieu de Python."
+            try:
+                ast.parse(content, filename=target)
+            except SyntaxError as exc:
+                return False, f"Python invalide: ligne {exc.lineno}: {exc.msg}"
+            return True, ""
+
+        if suffix == ".json":
+            try:
+                json.loads(content)
+            except Exception as exc:
+                return False, f"JSON invalide: {exc}"
+            return True, ""
+
+        if suffix in {".html", ".htm"}:
+            if stripped.startswith(("def ", "import ", "from ")) and "<html" not in stripped.lower():
+                return False, "Le modèle a généré du Python au lieu de HTML."
+            return True, ""
+
+        if suffix in {".js", ".jsx", ".ts", ".tsx"}:
+            if stripped.lower().startswith(("<!doctype html", "<html")):
+                return False, "Le modèle a généré une page HTML complète au lieu du fichier JavaScript/TypeScript demandé."
+            return True, ""
+
+        return True, ""
     def generate_task(self, request: str, task: dict) -> list[dict]:
         targets = [str(x) for x in task.get("files", [])][:1]
         if not targets:
@@ -246,6 +279,29 @@ MODE LABORATOIRE TI-LEX:
         if not content.strip():
             raise ValueError(f"Réponse vide pour {target}")
 
+        valid, validation_error = self._validate_generated_content(target, content)
+        if not valid:
+            self.status(f"🧪 Validation échouée • {target} • correction automatique")
+            repair_prompt = f"""Tu dois CORRIGER le fichier suivant avant sauvegarde.
+
+Fichier cible: {target}
+Demande utilisateur: {request}
+Erreur détectée par TI-LEX: {validation_error}
+
+CONTENU À CORRIGER:
+{content}
+
+Retourne uniquement le contenu COMPLET et valide du fichier {target}.
+Respecte strictement le langage correspondant à son extension.
+Aucune explication, aucun Markdown, aucun résumé."""
+            content = self._ask(repair_prompt, temperature=0.05)
+            fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
+            if fenced:
+                content = fenced.group(1)
+            valid, validation_error = self._validate_generated_content(target, content)
+            if not valid:
+                raise ValueError(f"Validation refusée pour {target}: {validation_error}")
+
         target_path = self._safe(target)
         old_content = target_path.read_text(encoding="utf-8", errors="replace") if target_path.is_file() else ""
         old_lines = old_content.splitlines()
@@ -273,6 +329,9 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
             fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
             if fenced:
                 content = fenced.group(1)
+            valid, validation_error = self._validate_generated_content(target, content)
+            if not valid:
+                raise ValueError(f"Validation refusée après correction pour {target}: {validation_error}")
             new_lines = content.splitlines()
             if len(new_lines) < max(8, int(len(old_lines) * 0.45)):
                 raise ValueError(
