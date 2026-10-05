@@ -439,17 +439,22 @@ def show_dev_menu():
         "[dark_orange][02][/] [bright_white]NOUVEAU PROJET[/]\n"
         "[dark_orange][03][/] [bright_white]ÉDITEUR / FICHIERS[/]\n"
         "[dark_orange][04][/] [bright_white]ASSISTANT IA[/]\n"
-        "[dark_orange][05][/] [bright_white]EXÉCUTER UN FICHIER[/]\n"
+        "[dark_orange][05][/] [bright_white]EXÉCUTER LE PROJET[/]\n"
         "[dark_orange][06][/] [bright_white]RECHERCHER DANS LE CODE[/]\n"
-        "[dark_orange][07][/] [bright_white]ÉTAT DU PROJET[/]\n"
-        "[dark_orange][08][/] [bright_white]CONFIGURATION / POLICE[/]\n"
-        "[dark_orange][09][/] [bright_red]SUPPRIMER UN PROJET[/]\n"
-        "[dark_orange][10][/] [bright_white]AIDE[/]\n"
+        "[dark_orange][07][/] [bright_white]TESTS DU PROJET[/]\n"
+        "[dark_orange][08][/] [bright_white]DÉPENDANCES PYTHON[/]\n"
+        "[dark_orange][09][/] [bright_white]GIT LOCAL[/]\n"
+        "[dark_orange][10][/] [bright_white]ÉTAT DU PROJET[/]\n"
+        "[dark_orange][11][/] [bright_white]HISTORIQUE / SAUVEGARDES[/]\n"
+        "[dark_orange][12][/] [bright_white]CONFIGURATION TI-LEX[/]\n"
+        "[dark_orange][13][/] [bright_red]SUPPRIMER UN PROJET[/]\n"
+        "[dark_orange][14][/] [bright_white]AIDE[/]\n"
         "[dark_orange][00][/] [bright_white]QUITTER[/]\n\n"
         f"[#39FF14]PROJET ACTIF › {project_name}[/]",
         title="[#39FF14]TI-LEX CODEX • MENU DÉVELOPPEUR[/]",
         border_style="#39FF14"
     ))
+
 
 def delete_project():
     global active_project
