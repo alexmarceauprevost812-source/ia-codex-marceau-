@@ -126,7 +126,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
   ]
 }}
 Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; chaque tâche doit rester petite
-(1 à 4 fichiers); utilise le minimum de fichiers nécessaires; ordonne les dépendances."""
+(EXACTEMENT 1 fichier par tâche); si plusieurs fichiers sont nécessaires, crée plusieurs tâches successives; utilise le minimum de fichiers nécessaires; ordonne les dépendances."""
         plan = self._json(self._ask(prompt))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
@@ -152,7 +152,7 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; chaque tâc
         return backup
 
     def generate_task(self, request: str, task: dict) -> list[dict]:
-        targets = [str(x) for x in task.get("files", [])][:4]
+        targets = [str(x) for x in task.get("files", [])][:1]
         needs = [str(x) for x in task.get("needs", [])][:12]
         context_paths = list(dict.fromkeys(needs + targets))
         context = self.context_for(context_paths)
@@ -162,7 +162,7 @@ Tâche: {json.dumps(task, ensure_ascii=False)}
 Contexte utile:
 {context or "(aucun fichier source nécessaire)"}
 
-Produis les fichiers complets nécessaires à CETTE tâche seulement.
+Produis EXACTEMENT UN fichier complet pour CETTE tâche. Ne génère jamais plusieurs fichiers dans la même réponse.
 Réponds UNIQUEMENT en JSON valide, sans markdown:
 {{
   "files": [
@@ -171,7 +171,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
   "notes": "court résumé"
 }}
 Ne renvoie jamais un diff ni des points de suspension. Le contenu doit être directement enregistrable.
-Ne touche pas aux fichiers hors de la tâche sauf nécessité absolue."""
+Le tableau "files" doit contenir exactement un élément. Ne touche à aucun autre fichier."""
         payload = self._json(self._ask(prompt))
         items = payload.get("files", []) if isinstance(payload, dict) else []
         if not isinstance(items, list):
