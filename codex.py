@@ -769,6 +769,7 @@ class CodexLocalApp(App):
         self._chat_typing_text = ""
         self._chat_typing_pos = 0
         self._chat_typing_timer = None
+        self._codex_busy = False
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -878,6 +879,10 @@ class CodexLocalApp(App):
         elif cmd.lower() in {"save", "sauve", "sauvegarde"}:
             self.action_save_file()
         elif cmd:
+            if self._codex_busy:
+                self.notify("CODEX termine la commande en cours… attends la fin avant d'en lancer une autre.", severity="warning")
+                return
+            self._codex_busy = True
             self.notify("CODEX travaille en arrière-plan…")
             self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=True)
 
@@ -977,13 +982,22 @@ class CodexLocalApp(App):
 
 
     def _build_in_background(self, request):
-        engine = CodexEngine(self.root, model=config["model"])
-        result = engine.build(request)
-        self.call_from_thread(self._finish_build, result, engine.last_content, engine.last_stats)
+        try:
+            engine = CodexEngine(self.root, model=config["model"])
+            result = engine.build(request)
+            self.call_from_thread(self._finish_build, result, engine.last_content, engine.last_stats)
+        except Exception as exc:
+            self.call_from_thread(self._finish_build_error, str(exc))
+
+    def _finish_build_error(self, error):
+        self._codex_busy = False
+        self.notify("Erreur moteur CODEX: " + error, severity="error")
+        self.query_one("#user_input", Input).focus()
 
     def _finish_build(self, result, generated_code, stats):
         self.notify(result.message, severity="information" if result.ok else "error")
         if not result.ok:
+            self._codex_busy = False
             return
         view = self.query_one("#files", ListView)
         view.clear()
@@ -1036,6 +1050,7 @@ class CodexLocalApp(App):
         self._typing_timer = self.set_interval(0.06, self._typing_tick)
 
     def _finish_typing_status(self):
+        self._codex_busy = False
         if self.current_path:
             s = self._typing_stats
             self.query_one("#editor_title", Static).update(
