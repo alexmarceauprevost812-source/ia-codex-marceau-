@@ -142,6 +142,7 @@ Demande: {request}
 Fichiers existants: {json.dumps(files, ensure_ascii=False)}
 
 Conçois un plan professionnel avec 1 fichier cible par défaut, ou 2 fichiers MAXIMUM seulement si la demande exige réellement deux fichiers distincts. Choisis de vrais noms de fichiers avec une extension adaptée au langage. N’utilise jamais README.md comme remplacement d’un fichier de code sauf si la demande parle explicitement du README.
+TI-LEX est un CODEX DE LABORATOIRE: quand la demande concerne un test, conçois du code réellement exécutable dans un labo local autorisé, avec des données fictives ou des cibles locales comme 127.0.0.1. Favorise les tests unitaires, intégration, diagnostics, mocks, serveurs locaux et simulations défensives. Ne planifie pas de vol d'identifiants, malware, persistance, contournement de sécurité, destruction ou attaque contre des systèmes tiers.
 Réponds UNIQUEMENT en JSON valide, sans markdown:
 {{
   "summary": "résumé",
@@ -202,7 +203,15 @@ imports, fonctions, classes, commentaires utiles et comportements existants.
 Ne remplace jamais un gros fichier par une version miniature sauf si l'utilisateur le demande explicitement.
 N'écris jamais "voici le code", "résumé", "TODO", "à compléter", "..." ou une explication à la place du contenu réel.
 Réponds avec le contenu brut du fichier, sans JSON, sans explication et sans bloc Markdown.
-Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de suspension."""
+Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de suspension.
+
+MODE LABORATOIRE TI-LEX:
+- Le fichier doit pouvoir être lancé et testé localement quand c'est pertinent.
+- Pour un test réseau ou sécurité, utilise uniquement un environnement local/autorisé, des données synthétiques, des mocks ou 127.0.0.1.
+- Ajoute des messages clairs de démarrage, résultat et erreur pour faciliter les essais.
+- Préfère des fonctions testables et une section main quand le langage s'y prête.
+- Ne produis pas de code de vol d'identifiants, malware, persistance, évasion, destruction, ou d'attaque contre des systèmes tiers.
+- Si la demande dangereuse ne peut pas être rendue sûre, transforme-la en simulation défensive locale qui démontre le concept sans capacité offensive réelle."""
         content = self._ask(prompt)
         fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
         if fenced:
