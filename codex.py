@@ -770,6 +770,7 @@ class CodexLocalApp(App):
         self._chat_typing_pos = 0
         self._chat_typing_timer = None
         self._codex_busy = False
+        self._codex_queue = []
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -880,11 +881,25 @@ class CodexLocalApp(App):
             self.action_save_file()
         elif cmd:
             if self._codex_busy:
-                self.notify("CODEX termine la commande en cours… attends la fin avant d'en lancer une autre.", severity="warning")
+                self._codex_queue.append(cmd)
+                self.notify(
+                    "Commande ajoutée à la file • " + str(len(self._codex_queue)) + " en attente",
+                    severity="information",
+                )
                 return
-            self._codex_busy = True
-            self.notify("CODEX travaille en arrière-plan…")
-            self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=True)
+            self._start_codex_command(cmd)
+
+    def _start_codex_command(self, cmd):
+        self._codex_busy = True
+        self.notify("CODEX travaille en arrière-plan…")
+        self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=False)
+
+    def _run_next_codex_command(self):
+        if self._codex_queue:
+            next_cmd = self._codex_queue.pop(0)
+            self._start_codex_command(next_cmd)
+        else:
+            self._codex_busy = False
 
     def _style_chat_message(self, prefix, message, user=False):
         line = Text(prefix, style="bold #FF7A00" if user else "bold #00E5FF")
@@ -990,15 +1005,17 @@ class CodexLocalApp(App):
             self.call_from_thread(self._finish_build_error, str(exc))
 
     def _finish_build_error(self, error):
-        self._codex_busy = False
         self.notify("Erreur moteur CODEX: " + error, severity="error")
         self.query_one("#user_input", Input).focus()
+        self._run_next_codex_command()
 
     def _finish_build(self, result, generated_code, stats):
         self.notify(result.message, severity="information" if result.ok else "error")
         if not result.ok:
-            self._codex_busy = False
+            self.query_one("#user_input", Input).focus()
+            self._run_next_codex_command()
             return
+
         view = self.query_one("#files", ListView)
         view.clear()
         for p in sorted(
@@ -1009,18 +1026,24 @@ class CodexLocalApp(App):
             item = ListItem(Label("📄 " + str(p.relative_to(self.root))))
             item.path = p
             view.append(item)
+
         if result.changed:
             target = (self.root / result.changed[-1]).resolve()
             if target.is_file():
                 self.current_path = target
                 self._set_editor_language(target)
                 code = generated_code or target.read_text(encoding="utf-8", errors="replace")
+                self.query_one("#editor", TextArea).text = code
+                s = stats or {"added": 0, "modified": 0, "deleted": 0}
                 self.query_one("#editor_title", Static).update(
-                    "CODEX • ÉCRITURE NÉON 1.3× • 📄 "
-                    + target.name + " • " + str(len(result.changed)) + " fichier(s)"
+                    "CODEX • SAUVEGARDÉ • 📄 " + target.name
+                    + f" • +{s['added']} ajoutées"
+                    + f" • ~{s['modified']} modifiées"
+                    + f" • -{s['deleted']} supprimées"
                 )
-                self._start_typing(code, stats)
+
         self.query_one("#user_input", Input).focus()
+        self._run_next_codex_command()
 
     def _start_typing(self, code, stats=None):
         if self._typing_timer:
