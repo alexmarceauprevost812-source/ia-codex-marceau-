@@ -39,6 +39,8 @@ class CodexEngine:
         self.last_file = None
         self.last_content = ""
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
+        self.last_outputs = {}
+        self.last_stats_by_file = {}
         self.state_dir = self.root / ".tilex"
         self.state_dir.mkdir(parents=True, exist_ok=True)
 
@@ -139,7 +141,7 @@ Projet: {self.root.name}
 Demande: {request}
 Fichiers existants: {json.dumps(files, ensure_ascii=False)}
 
-Conçois un plan pour UN SEUL fichier cible par commande. Même si la demande pourrait être découpée, cette exécution ne doit créer ou modifier qu’un seul fichier. Choisis le fichier le plus pertinent et concentre toute la réponse dedans.
+Conçois un plan professionnel avec 1 fichier cible par défaut, ou 2 fichiers MAXIMUM seulement si la demande exige réellement deux fichiers distincts. Choisis de vrais noms de fichiers avec une extension adaptée au langage. N’utilise jamais README.md comme remplacement d’un fichier de code sauf si la demande parle explicitement du README.
 Réponds UNIQUEMENT en JSON valide, sans markdown:
 {{
   "summary": "résumé",
@@ -153,8 +155,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
     }}
   ]
 }}
-Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; chaque tâche doit rester petite
-(EXACTEMENT 1 fichier total et 1 seule tâche); ne crée jamais plusieurs tâches pour une même commande."""
+Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 ou 2 tâches maximum; chaque tâche cible EXACTEMENT 1 fichier. Donne toujours un vrai nom de fichier avec extension. Ne génère jamais un résumé à la place du code. N’utilise README.md que si l’utilisateur le demande explicitement."""
         plan = self._json(self._ask(prompt, json_mode=True))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
@@ -194,10 +195,12 @@ Objectif: {task.get("goal", "implémenter la demande")}
 Contexte utile:
 {context or "(aucun fichier source nécessaire)"}
 
-Écris le contenu COMPLET du fichier cible uniquement.
+Écris le contenu COMPLET, exécutable et professionnel du fichier cible uniquement.
+Le résultat doit être le vrai fichier final demandé, jamais un résumé, jamais une description et jamais un pseudo-code.
 Si le fichier existe déjà, conserve tout le code qui n'est pas directement concerné par la demande:
 imports, fonctions, classes, commentaires utiles et comportements existants.
 Ne remplace jamais un gros fichier par une version miniature sauf si l'utilisateur le demande explicitement.
+N'écris jamais "voici le code", "résumé", "TODO", "à compléter", "..." ou une explication à la place du contenu réel.
 Réponds avec le contenu brut du fichier, sans JSON, sans explication et sans bloc Markdown.
 Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de suspension."""
         content = self._ask(prompt)
@@ -278,6 +281,8 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
                 self.last_file = rel
                 self.last_content = content
                 self.last_stats = stats
+                self.last_outputs[rel] = content
+                self.last_stats_by_file[rel] = stats
                 changed.append(rel)
         return changed
 
@@ -322,6 +327,8 @@ cd ia-codex-marceau-
 
     def build(self, request: str, max_tasks: int = 40) -> CodexResult:
         try:
+            self.last_outputs = {}
+            self.last_stats_by_file = {}
             task = self.turbo_task(request)
             if task is not None:
                 self.status("⚡ MODE TURBO • génération directe")
@@ -336,7 +343,12 @@ cd ia-codex-marceau-
             else:
                 self.status("🧠 Architecture du projet…")
                 plan = self.make_plan(request)
-            tasks = plan.get("tasks", [])[:1]
+            tasks = plan.get("tasks", [])[:2]
+            if "readme" not in request.lower():
+                for task_item in tasks:
+                    files = [str(x) for x in task_item.get("files", [])]
+                    if any(Path(x).name.lower() == "readme.md" for x in files):
+                        raise ValueError("Le plan IA a ciblé README.md au lieu d'un vrai fichier de code.")
             changed = []
             for index, task in enumerate(tasks, 1):
                 task_id = task.get("id", f"T{index:02}")
