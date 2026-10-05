@@ -7,6 +7,7 @@ import shutil
 import sys
 import time
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 from rich.console import Console
 from rich.panel import Panel
@@ -798,6 +799,11 @@ class CodexLocalApp(App):
         self._work_status = "PRÊT"
         self._work_started = None
         self._work_timer = None
+        # Un seul worker CODEX permanent: évite l'accumulation de workers
+        # après plusieurs commandes et garantit une exécution strictement séquentielle.
+        self._codex_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tilex-codex")
+        self._codex_future = None
+        self._command_count = 0
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -949,9 +955,15 @@ class CodexLocalApp(App):
         if self._work_timer:
             self._work_timer.stop()
         self._work_timer = self.set_interval(0.5, self._work_tick)
-        self.query_one("#editor_title", Static).update("CODEX • 🧠 Analyse de la demande • 0.0s")
+        self.query_one("#editor_title", Static).update(
+            f"CODEX • COMMANDE #{self._command_count + 1} • 🧠 Analyse de la demande • 0.0s"
+        )
         self.notify("CODEX travaille • progression visible en haut")
-        self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=False)
+        self._command_count += 1
+        try:
+            self._codex_future = self._codex_executor.submit(self._build_in_background, cmd)
+        except RuntimeError as exc:
+            self._finish_build_error("Worker CODEX indisponible: " + str(exc))
 
     def _show_codex_status(self, message):
         self._work_status = message
@@ -975,9 +987,12 @@ class CodexLocalApp(App):
     def _run_next_codex_command(self):
         if self._codex_queue:
             next_cmd = self._codex_queue.pop(0)
-            self._start_codex_command(next_cmd)
+            # Laisse Textual terminer le cycle d'affichage courant avant de
+            # démarrer la commande suivante.
+            self.call_after_refresh(self._start_codex_command, next_cmd)
         else:
             self._codex_busy = False
+            self._codex_future = None
             self._stop_work_status()
 
     def _style_chat_message(self, prefix, message, user=False):
@@ -1146,14 +1161,11 @@ class CodexLocalApp(App):
             code = code or ""
             lines = code.splitlines(keepends=True)
             total = len(lines)
-            if total > 500:
-                chunk = 18
-            elif total > 220:
-                chunk = 10
-            elif total > 80:
-                chunk = 5
-            else:
-                chunk = 2
+            # Maximum ~50 rafraîchissements par fichier pour éviter que
+            # la coloration syntaxique ne fige l'interface après plusieurs commandes.
+            chunk = max(2, (total + 49) // 50)
+            if total > 1200:
+                chunk = max(chunk, 30)
             self._reveal_states.append({
                 "rel": rel,
                 "path": path,
@@ -1402,6 +1414,16 @@ class CodexLocalApp(App):
 
     def on_unmount(self):
         self.action_save_file()
+        try:
+            if self._reveal_timer:
+                self._reveal_timer.stop()
+                self._reveal_timer = None
+            if self._work_timer:
+                self._work_timer.stop()
+                self._work_timer = None
+            self._codex_executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
 
 def codex_local_lab():
     if not active_project:
