@@ -818,11 +818,20 @@ class CodexLocalApp(App):
             self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=True)
 
     def _render_chat(self):
-        lines = ["=== TI-LEX CHAT IA ===", ""]
+        log = self.query_one("#chat_log", RichLog)
+        log.clear()
+        log.write(Text("=== TI-LEX CHAT IA ===", style="bold #39FF14"))
+        colors = ["#39FF14", "#00E5FF", "#D65CFF", "#FFFF00", "#FF1493", "#FF7A00"]
         for who, message in self.chat_history[-30:]:
-            lines.append(who + " › " + message)
-            lines.append("")
-        self.query_one("#editor", TextArea).text = "\n".join(lines)
+            line = Text()
+            if who == "TOI":
+                line.append("TOI › ", style="bold #FF7A00")
+                line.append(message, style="#FFFFFF")
+            else:
+                line.append("IA › ", style="bold #00E5FF")
+                for n, word in enumerate(message.split()):
+                    line.append(word + " ", style=colors[n % len(colors)])
+            log.write(line)
 
     def _chat_in_background(self, message):
         history = "\n".join(who + ": " + text for who, text in self.chat_history[-12:])
