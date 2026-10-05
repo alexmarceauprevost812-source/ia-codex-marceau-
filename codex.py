@@ -519,7 +519,8 @@ def main():
 
     startup_menu()
     console.print(f"[tilex.success]✓ MODE CODEX • PROJET : {active_project.name}[/]")
-    console.print("[tilex.info]Écris directement ce que tu veux coder. /aide pour les commandes, /chat pour discuter.[/]")\n    show_dev_menu()
+    console.print("[tilex.info]Écris directement ce que tu veux coder. /aide pour les commandes, /chat pour discuter.[/]")
+    show_dev_menu()
 
     while True:
         cmd = session.prompt(f"TI-LEX CODEX [{active_project.name}] › ").strip()
