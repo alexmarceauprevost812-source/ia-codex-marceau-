@@ -204,7 +204,7 @@ def print_ai_response(text):
         found = True
         prose = text[pos:match.start()].strip()
         if prose:
-            fluid(prose, delay=0.025)
+            fluid(prose, delay=0.005)
 
         language = (match.group(1) or "python").lower()
         aliases = {
@@ -220,14 +220,14 @@ def print_ai_response(text):
             title=f"[tilex.action]CODE • {language.upper()}[/]",
             border_style="bright_cyan",
         )
-        time.sleep(0.12)
+        time.sleep(0.02)
         console.print(rendered)
         pos = match.end()
 
     if found:
         tail = text[pos:].strip()
         if tail:
-            fluid(tail, delay=0.025)
+            fluid(tail, delay=0.005)
         return
 
     # 2) Secours : si le modèle oublie les backticks mais la réponse ressemble
@@ -247,7 +247,7 @@ def print_ai_response(text):
         time.sleep(0.12)
         console.print(rendered)
     else:
-        fluid(text.strip(), delay=0.025)
+        fluid(text.strip(), delay=0.005)
 
 def ollama(prompt):
     """Streaming réel : affiche la réponse pendant qu'Ollama la génère."""
@@ -1161,11 +1161,15 @@ class CodexLocalApp(App):
             code = code or ""
             lines = code.splitlines(keepends=True)
             total = len(lines)
-            # Maximum ~50 rafraîchissements par fichier pour éviter que
-            # la coloration syntaxique ne fige l'interface après plusieurs commandes.
-            chunk = max(2, (total + 49) // 50)
+            # Mode MAX FLUIDE: environ 12 à 16 rafraîchissements par fichier.
+            # Moins de redraws = écriture visuelle beaucoup plus rapide et plus stable.
+            chunk = max(6, (total + 15) // 16)
+            if total > 600:
+                chunk = max(chunk, 40)
             if total > 1200:
-                chunk = max(chunk, 30)
+                chunk = max(chunk, 80)
+            if total > 2500:
+                chunk = max(chunk, 160)
             self._reveal_states.append({
                 "rel": rel,
                 "path": path,
@@ -1180,7 +1184,7 @@ class CodexLocalApp(App):
             "CODEX • ÉCRITURE PROFESSIONNELLE • "
             + ("2 FICHIERS EN PARALLÈLE" if len(changed) > 1 else "1 FICHIER")
         )
-        self._reveal_timer = self.set_interval(0.10, self._multi_reveal_tick)
+        self._reveal_timer = self.set_interval(0.025, self._multi_reveal_tick)
 
     def _multi_reveal_tick(self):
         all_done = True
@@ -1238,15 +1242,15 @@ class CodexLocalApp(App):
             self._finish_typing_status()
             return
         elif size > 12000:
-            self._typing_chunk = 240
+            self._typing_chunk = 1200
         elif size > 5000:
-            self._typing_chunk = 120
+            self._typing_chunk = 700
         elif size > 1500:
-            self._typing_chunk = 60
+            self._typing_chunk = 350
         else:
-            self._typing_chunk = 24
+            self._typing_chunk = 180
 
-        self._typing_timer = self.set_interval(0.06, self._typing_tick)
+        self._typing_timer = self.set_interval(0.02, self._typing_tick)
 
     def _finish_typing_status(self):
         if self.current_path:
