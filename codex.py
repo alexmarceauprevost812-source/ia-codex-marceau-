@@ -752,6 +752,7 @@ class CodexLocalApp(App):
         self._typing_text = ""
         self._typing_pos = 0
         self._typing_timer = None
+        self._typing_stats = {"added": 0, "modified": 0, "deleted": 0}
         self.mode = "codex"
         self.chat_history = []
 
@@ -894,9 +895,9 @@ class CodexLocalApp(App):
     def _build_in_background(self, request):
         engine = CodexEngine(self.root, model=config["model"])
         result = engine.build(request)
-        self.call_from_thread(self._finish_build, result, engine.last_content)
+        self.call_from_thread(self._finish_build, result, engine.last_content, engine.last_stats)
 
-    def _finish_build(self, result, generated_code):
+    def _finish_build(self, result, generated_code, stats):
         self.notify(result.message, severity="information" if result.ok else "error")
         if not result.ok:
             return
@@ -919,14 +920,15 @@ class CodexLocalApp(App):
                     "CODEX • ÉCRITURE NÉON 1.3× • 📄 "
                     + target.name + " • " + str(len(result.changed)) + " fichier(s)"
                 )
-                self._start_typing(code)
+                self._start_typing(code, stats)
         self.query_one("#user_input", Input).focus()
 
-    def _start_typing(self, code):
+    def _start_typing(self, code, stats=None):
         if self._typing_timer:
             self._typing_timer.stop()
         self._typing_text = code
         self._typing_pos = 0
+        self._typing_stats = stats or {"added": 0, "modified": 0, "deleted": 0}
         self.query_one("#editor", TextArea).text = ""
         # Environ 1,3× une frappe humaine, affichée par petits groupes.
         self._typing_timer = self.set_interval(0.035, self._typing_tick)
@@ -937,13 +939,26 @@ class CodexLocalApp(App):
                 self._typing_timer.stop()
                 self._typing_timer = None
             if self.current_path:
+                s = self._typing_stats
                 self.query_one("#editor_title", Static).update(
-                    "CODEX • CODE NÉON + SAUVEGARDÉ • 📄 " + self.current_path.name
+                    "CODEX • SAUVEGARDÉ • 📄 " + self.current_path.name
+                    + f" • +{s['added']} ajoutées • ~{s['modified']} modifiées • -{s['deleted']} supprimées"
                 )
             return
         # 2 caractères/tick ≈ 57 caractères/s : effet fluide 1,3×.
         self._typing_pos = min(self._typing_pos + 2, len(self._typing_text))
         self.query_one("#editor", TextArea).text = self._typing_text[:self._typing_pos]
+        if self.current_path:
+            s = self._typing_stats
+            progress = self._typing_pos / max(1, len(self._typing_text))
+            added_now = round(s["added"] * progress)
+            modified_now = round(s["modified"] * progress)
+            self.query_one("#editor_title", Static).update(
+                "CODEX • ÉCRITURE • 📄 " + self.current_path.name
+                + f" • +{added_now}/{s['added']} ajoutées"
+                + f" • ~{modified_now}/{s['modified']} modifiées"
+                + f" • -{s['deleted']} supprimées"
+            )
 
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
