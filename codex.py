@@ -510,7 +510,7 @@ def show_codex_workspace(filename=None, codex_message=None):
             )
         except Exception as exc:
             body = Text(f"Impossible d'ouvrir ce fichier : {exc}", style="tilex.error")
-        title = f"[bright_cyan]{file_icon(selected)} {selected.name}[/]"
+        title = f"[#39FF14]🤖 CODEX • ÉCRITURE / GÉNÉRATION[/] [bright_cyan]• {file_icon(selected)} {selected.name}[/]"
     else:
         body = Text(justify="right")
         body.append("Sélectionne un fichier pour l'afficher ici.\n\n", style="bright_white")
@@ -519,7 +519,7 @@ def show_codex_workspace(filename=None, codex_message=None):
             "📜 Logs   📦 Dépendances   🔀 Git   💾 Sauvegardes   ⚙️ Settings",
             style="bright_white"
         )
-        title = "[bright_cyan]TI-LEX CODEX LOCAL[/]"
+        title = "[#39FF14]🤖 CODEX • ÉCRITURE / GÉNÉRATION[/]"
 
     right = Panel(body, title=title, border_style="bright_cyan")
 
@@ -542,22 +542,6 @@ def show_codex_workspace(filename=None, codex_message=None):
     grid.add_row(left, right, tools_panel)
     console.print(grid)
 
-    codex_body = Text()
-    if codex_message:
-        codex_body.append(codex_message, style="bright_white")
-    else:
-        codex_body.append(
-            "Prêt. Écris ta demande dans CODEX LOCAL › pour travailler sur le projet.",
-            style="tilex.comment"
-        )
-    codex_body.justify = "center"
-    console.print(Panel(
-        codex_body,
-        title="[#39FF14]🤖 CODEX • ÉCRITURE / GÉNÉRATION[/]",
-        border_style="dark_orange",
-        padding=(1, 2),
-        height=8
-    ))
 
 def show_diff_preview(filename, old_text, new_text):
     import difflib
