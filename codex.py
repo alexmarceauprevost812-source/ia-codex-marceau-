@@ -842,8 +842,11 @@ class CodexLocalApp(App):
     def _finish_chat(self, answer):
         if self.mode != "chat":
             return
+        self.query_one("#editor_title", Static).update(
+            "CHAT IA • RÉPONSE NÉON 1.3x • /codex POUR REVENIR"
+        )
+        self._start_typing(answer)
         self.chat_history.append(("IA", answer))
-        self._render_chat()
         self.query_one("#user_input", Input).focus()
 
     def _build_in_background(self, request):
