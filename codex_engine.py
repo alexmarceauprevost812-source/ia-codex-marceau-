@@ -195,6 +195,9 @@ Contexte utile:
 {context or "(aucun fichier source nécessaire)"}
 
 Écris le contenu COMPLET du fichier cible uniquement.
+Si le fichier existe déjà, conserve tout le code qui n'est pas directement concerné par la demande:
+imports, fonctions, classes, commentaires utiles et comportements existants.
+Ne remplace jamais un gros fichier par une version miniature sauf si l'utilisateur le demande explicitement.
 Réponds avec le contenu brut du fichier, sans JSON, sans explication et sans bloc Markdown.
 Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de suspension."""
         content = self._ask(prompt)
@@ -203,6 +206,41 @@ Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de susp
             content = fenced.group(1)
         if not content.strip():
             raise ValueError(f"Réponse vide pour {target}")
+
+        target_path = self._safe(target)
+        old_content = target_path.read_text(encoding="utf-8", errors="replace") if target_path.is_file() else ""
+        old_lines = old_content.splitlines()
+        new_lines = content.splitlines()
+        destructive_words = (
+            "supprime", "efface", "remplace tout", "réécris tout", "reecris tout",
+            "simplifie", "réduis", "reduit", "vide le fichier"
+        )
+        destructive_request = any(word in request.lower() for word in destructive_words)
+
+        if old_lines and not destructive_request and len(old_lines) >= 20 and len(new_lines) < max(8, int(len(old_lines) * 0.60)):
+            retry_prompt = f"""Tu modifies un fichier EXISTANT de {len(old_lines)} lignes.
+Ta première réponse ne contient que {len(new_lines)} lignes, ce qui risque d'effacer du code utile.
+
+Demande utilisateur: {request}
+Fichier cible: {target}
+
+CONTENU ACTUEL COMPLET:
+{old_content}
+
+Refais la modification en conservant TOUT ce qui n'est pas directement concerné par la demande.
+Ne raccourcis pas le fichier inutilement. Garde les fonctions, classes, imports et comportements existants.
+Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni explication."""
+            content = self._ask(retry_prompt)
+            fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
+            if fenced:
+                content = fenced.group(1)
+            new_lines = content.splitlines()
+            if len(new_lines) < max(8, int(len(old_lines) * 0.45)):
+                raise ValueError(
+                    f"Protection activée: résultat trop court ({len(new_lines)} lignes) "
+                    f"pour remplacer {len(old_lines)} lignes."
+                )
+
         return [{"path": target, "content": content}]
 
     def apply_files(self, items: list[dict]) -> list[str]:
