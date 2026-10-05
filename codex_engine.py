@@ -47,11 +47,14 @@ class CodexEngine:
             raise ValueError(f"Chemin refusé: {rel}")
         return p
 
-    def _ask(self, prompt: str, temperature: float = 0.15) -> str:
+    def _ask(self, prompt: str, temperature: float = 0.15, json_mode: bool = False) -> str:
+        payload = {"model": self.model, "prompt": prompt, "stream": False,
+                   "options": {"temperature": temperature}}
+        if json_mode:
+            payload["format"] = "json"
         response = requests.post(
             self.endpoint + "/api/generate",
-            json={"model": self.model, "prompt": prompt, "stream": False,
-                  "options": {"temperature": temperature}},
+            json=payload,
             timeout=600,
         )
         response.raise_for_status()
@@ -127,7 +130,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
 }}
 Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; chaque tâche doit rester petite
 (EXACTEMENT 1 fichier par tâche); si plusieurs fichiers sont nécessaires, crée plusieurs tâches successives; utilise le minimum de fichiers nécessaires; ordonne les dépendances."""
-        plan = self._json(self._ask(prompt))
+        plan = self._json(self._ask(prompt, json_mode=True))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
         plan["request"] = request
@@ -153,30 +156,29 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; chaque tâc
 
     def generate_task(self, request: str, task: dict) -> list[dict]:
         targets = [str(x) for x in task.get("files", [])][:1]
+        if not targets:
+            raise ValueError("Tâche sans fichier cible")
+        target = targets[0]
         needs = [str(x) for x in task.get("needs", [])][:12]
-        context_paths = list(dict.fromkeys(needs + targets))
+        context_paths = list(dict.fromkeys(needs + [target]))
         context = self.context_for(context_paths)
         prompt = f"""Tu es l'IMPLEMENTEUR de TI-LEX CODEX.
 Demande globale: {request}
-Tâche: {json.dumps(task, ensure_ascii=False)}
+Fichier cible: {target}
+Objectif: {task.get("goal", "implémenter la demande")}
 Contexte utile:
 {context or "(aucun fichier source nécessaire)"}
 
-Produis EXACTEMENT UN fichier complet pour CETTE tâche. Ne génère jamais plusieurs fichiers dans la même réponse.
-Réponds UNIQUEMENT en JSON valide, sans markdown:
-{{
-  "files": [
-    {{"path": "chemin/relatif.py", "content": "contenu COMPLET du fichier"}}
-  ],
-  "notes": "court résumé"
-}}
-Ne renvoie jamais un diff ni des points de suspension. Le contenu doit être directement enregistrable.
-Le tableau "files" doit contenir exactement un élément. Ne touche à aucun autre fichier."""
-        payload = self._json(self._ask(prompt))
-        items = payload.get("files", []) if isinstance(payload, dict) else []
-        if not isinstance(items, list):
-            raise ValueError("Réponse fichiers invalide")
-        return items
+Écris le contenu COMPLET du fichier cible uniquement.
+Réponds avec le contenu brut du fichier, sans JSON, sans explication et sans bloc Markdown.
+Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de suspension."""
+        content = self._ask(prompt)
+        fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
+        if fenced:
+            content = fenced.group(1)
+        if not content.strip():
+            raise ValueError(f"Réponse vide pour {target}")
+        return [{"path": target, "content": content}]
 
     def apply_files(self, items: list[dict]) -> list[str]:
         valid = []
