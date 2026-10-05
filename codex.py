@@ -776,6 +776,7 @@ class CodexLocalApp(App):
         self._chat_typing_timer = None
         self._codex_busy = False
         self._codex_queue = []
+        self._listed_paths = set()
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -829,6 +830,7 @@ class CodexLocalApp(App):
             item = ListItem(Label("📄 " + str(rel)))
             item.path = p
             view.append(item)
+            self._listed_paths.add(str(rel).replace("\\", "/"))
 
     def on_list_view_selected(self, event):
         self.action_save_file()
@@ -1021,37 +1023,79 @@ class CodexLocalApp(App):
             self._run_next_codex_command()
             return
 
-        view = self.query_one("#files", ListView)
-        view.clear()
-        ignored = {".git", ".venv", "venv", "node_modules", ".tilex", "__pycache__", ".pytest_cache"}
-        visible_files = []
-        for root, dirs, names in os.walk(self.root):
-            dirs[:] = [d for d in dirs if d not in ignored]
-            root_path = Path(root)
-            for name in names:
-                visible_files.append(root_path / name)
-        for p in sorted(visible_files):
-            item = ListItem(Label("📄 " + str(p.relative_to(self.root))))
-            item.path = p
-            view.append(item)
-
         if result.changed:
             target = (self.root / result.changed[-1]).resolve()
             if target.is_file():
+                rel = str(target.relative_to(self.root)).replace("\\", "/")
+                if rel not in self._listed_paths:
+                    item = ListItem(Label("📄 " + rel))
+                    item.path = target
+                    self.query_one("#files", ListView).append(item)
+                    self._listed_paths.add(rel)
+
                 self.current_path = target
                 self._set_editor_language(target)
                 code = generated_code or target.read_text(encoding="utf-8", errors="replace")
-                self.query_one("#editor", TextArea).text = code
-                s = stats or {"added": 0, "modified": 0, "deleted": 0}
+                self._start_code_reveal(code, stats)
+                return
+
+        self.query_one("#user_input", Input).focus()
+        self._run_next_codex_command()
+
+    def _start_code_reveal(self, code, stats=None):
+        if self._typing_timer:
+            self._typing_timer.stop()
+            self._typing_timer = None
+
+        self._typing_stats = stats or {"added": 0, "modified": 0, "deleted": 0}
+        self._typing_lines = code.splitlines(keepends=True)
+        self._typing_line_pos = 0
+        self.query_one("#editor", TextArea).text = ""
+
+        total = len(self._typing_lines)
+        if total > 400:
+            self._typing_line_chunk = 20
+        elif total > 160:
+            self._typing_line_chunk = 10
+        elif total > 60:
+            self._typing_line_chunk = 5
+        else:
+            self._typing_line_chunk = 2
+
+        self._typing_timer = self.set_interval(0.09, self._code_reveal_tick)
+
+    def _code_reveal_tick(self):
+        total = len(self._typing_lines)
+        if self._typing_line_pos >= total:
+            if self._typing_timer:
+                self._typing_timer.stop()
+                self._typing_timer = None
+            s = self._typing_stats
+            if self.current_path:
                 self.query_one("#editor_title", Static).update(
-                    "CODEX • SAUVEGARDÉ • 📄 " + target.name
+                    "CODEX • SAUVEGARDÉ • 📄 " + self.current_path.name
                     + f" • +{s['added']} ajoutées"
                     + f" • ~{s['modified']} modifiées"
                     + f" • -{s['deleted']} supprimées"
                 )
+            self.query_one("#user_input", Input).focus()
+            self._run_next_codex_command()
+            return
 
-        self.query_one("#user_input", Input).focus()
-        self._run_next_codex_command()
+        self._typing_line_pos = min(
+            self._typing_line_pos + self._typing_line_chunk,
+            total,
+        )
+        visible = "".join(self._typing_lines[:self._typing_line_pos])
+        self.query_one("#editor", TextArea).text = visible
+
+        if self.current_path:
+            s = self._typing_stats
+            self.query_one("#editor_title", Static).update(
+                "CODEX • ÉCRITURE FLUIDE • 📄 " + self.current_path.name
+                + f" • ligne {self._typing_line_pos}/{total}"
+                + f" • +{s['added']} ~{s['modified']} -{s['deleted']}"
+            )
 
     def _start_typing(self, code, stats=None):
         if self._typing_timer:
@@ -1081,7 +1125,6 @@ class CodexLocalApp(App):
         self._typing_timer = self.set_interval(0.06, self._typing_tick)
 
     def _finish_typing_status(self):
-        self._codex_busy = False
         if self.current_path:
             s = self._typing_stats
             self.query_one("#editor_title", Static).update(
