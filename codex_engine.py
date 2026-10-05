@@ -58,9 +58,11 @@ class CodexEngine:
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "keep_alive": "15m",
             "options": {
                 "temperature": temperature,
                 "num_ctx": 4096,
+                "num_predict": 3072,
             },
         }
         if json_mode:
@@ -68,7 +70,7 @@ class CodexEngine:
         response = requests.post(
             self.endpoint + "/api/generate",
             json=payload,
-            timeout=600,
+            timeout=(5, 240),
         )
         response.raise_for_status()
         return response.json().get("response", "").strip()
@@ -98,7 +100,7 @@ class CodexEngine:
                     break
         return out
 
-    def context_for(self, paths: list[str], max_chars: int = 12000) -> str:
+    def context_for(self, paths: list[str], max_chars: int = 7000) -> str:
         chunks, used = [], 0
         for rel in paths:
             try:
@@ -181,6 +183,42 @@ class CodexEngine:
         scored.sort(key=lambda x: (-x[0], x[1], x[2]))
         return [rel for _, _, rel in scored[:max_files]]
 
+    def _fast_continuation_target(self, request: str) -> str | None:
+        """Choisit localement un fichier évident pour éviter un appel IA de planification."""
+        lower = request.lower()
+
+        # Une demande de création doit rester à l'architecte.
+        create_words = (
+            "nouveau fichier", "nouvelle fichier", "crée un fichier", "cree un fichier",
+            "créer un fichier", "nouveau module", "nouvelle page", "nouveau script",
+            "create file", "new file", "new module",
+        )
+        if any(word in lower for word in create_words):
+            return None
+
+        # Si la dernière commande a modifié exactement un fichier, une demande courte
+        # d'amélioration est très probablement une continuation de ce fichier.
+        memory = self._load_project_memory()
+        if memory:
+            last_changed = [str(x) for x in memory[-1].get("changed", []) if str(x)]
+            if len(last_changed) == 1:
+                candidate = last_changed[0]
+                try:
+                    if self._safe(candidate).is_file():
+                        return candidate
+                except (OSError, ValueError):
+                    pass
+
+        # Sinon utilise le meilleur fichier pertinent si un seul ressort.
+        relevant = self.relevant_files(request, max_files=2)
+        if len(relevant) == 1:
+            try:
+                if self._safe(relevant[0]).is_file():
+                    return relevant[0]
+            except (OSError, ValueError):
+                pass
+        return None
+
     def turbo_task(self, request: str) -> dict | None:
         """Résout localement une commande simple sans appel IA de planification."""
         raw = request.strip()
@@ -220,8 +258,18 @@ class CodexEngine:
         if mentions_file:
             return None
 
-        # 4) Aucun fichier explicite: ne force jamais main.py ou un autre fichier.
-        # L'architecte décide s'il faut modifier un fichier existant ou en créer un nouveau.
+        # 4) Aucun fichier explicite: pour une continuation évidente, évite
+        # complètement l'appel IA de planification (gain majeur de vitesse).
+        fast_target = self._fast_continuation_target(request)
+        if fast_target:
+            return {
+                "id": "FAST",
+                "goal": request,
+                "files": [fast_target],
+                "needs": [fast_target],
+            }
+
+        # Sinon seulement, l'architecte IA décide.
         return None
 
     def _normalize_plan(self, plan: dict, request: str) -> dict:
@@ -402,8 +450,8 @@ Retourne uniquement le contenu final complet du fichier."""
         if not targets:
             raise ValueError("Tâche sans fichier cible")
         target = targets[0]
-        needs = [str(x) for x in task.get("needs", [])][:12]
-        related = self.relevant_files(request, max_files=4)
+        needs = [str(x) for x in task.get("needs", [])][:6]
+        related = self.relevant_files(request, max_files=2)
         context_paths = list(dict.fromkeys([target] + needs + related))
         context = self.context_for(context_paths)
         prompt = f"""Tu es l'IMPLEMENTEUR de TI-LEX CODEX.
@@ -560,7 +608,8 @@ cd ia-codex-marceau-
             self.last_stats_by_file = {}
             task = self.turbo_task(request)
             if task is not None:
-                self.status("⚡ MODE TURBO • génération directe")
+                mode_name = "FAST" if task.get("id") == "FAST" else "TURBO"
+                self.status(f"⚡ MODE {mode_name} • génération directe • plan IA évité")
                 plan = {
                     "summary": "Mode turbo sans planification IA",
                     "architecture": ["1 commande", "1 fichier", "1 appel de génération"],
