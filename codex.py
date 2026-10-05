@@ -800,8 +800,13 @@ class CodexLocalApp(App):
                     target = (self.root / result.changed[-1]).resolve()
                     if target.is_file():
                         self.current_path = target
-                        self.query_one("#editor", TextArea).text = target.read_text(encoding="utf-8", errors="replace")
-                        self.query_one("#editor_title", Static).update("CODEX • GÉNÉRÉ • 📄 " + target.name)
+                        generated_code = engine.last_content or target.read_text(encoding="utf-8", errors="replace")
+                        self.query_one("#editor", TextArea).text = generated_code
+                        self.query_one("#editor_title", Static).update(
+                            "CODEX • CODE GÉNÉRÉ + SAUVEGARDÉ • 📄 " + target.name
+                            + " • " + str(len(result.changed)) + " fichier(s)"
+                        )
+                        self.query_one("#editor", TextArea).focus()
 
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
