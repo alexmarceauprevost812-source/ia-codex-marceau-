@@ -450,6 +450,51 @@ def show_dev_menu():
         border_style="#39FF14"
     ))
 
+def delete_project():
+    global active_project
+    root = projects_root().resolve()
+    projects = sorted([p for p in root.iterdir() if p.is_dir()])
+    if not projects:
+        console.print("[tilex.warning]Aucun projet à supprimer.[/]")
+        return
+
+    table = Table(title="SUPPRIMER UN PROJET", border_style="#39FF14")
+    table.add_column("#", style="dark_orange")
+    table.add_column("Projet", style="#39FF14")
+    for n, project in enumerate(projects, 1):
+        table.add_row(str(n), project.name)
+    console.print(table)
+
+    try:
+        choice = int(session.prompt("Numéro du projet › ").strip())
+    except ValueError:
+        console.print("[tilex.error]Choix invalide. Suppression annulée.[/]")
+        return
+    if choice < 1 or choice > len(projects):
+        console.print("[tilex.error]Choix invalide. Suppression annulée.[/]")
+        return
+
+    target = projects[choice - 1].resolve()
+    if target.parent != root:
+        console.print("[tilex.error]Protection TI-LEX : chemin refusé.[/]")
+        return
+
+    console.print(f"[tilex.danger]ATTENTION : {target.name} sera supprimé complètement.[/]")
+    typed_name = session.prompt("Confirmation 1 - écris exactement le nom du projet › ").strip()
+    if typed_name != target.name:
+        console.print("[tilex.warning]Nom incorrect. Suppression annulée.[/]")
+        return
+
+    final = session.prompt("Confirmation 2 - écris OUI pour supprimer › ").strip()
+    if final != "OUI":
+        console.print("[tilex.warning]Suppression annulée. Aucun fichier supprimé.[/]")
+        return
+
+    shutil.rmtree(target)
+    if active_project and active_project.resolve() == target:
+        active_project = None
+    console.print(f"[tilex.success]✓ Projet supprimé : {target.name}[/]")
+
 def startup_menu():
     global active_project
     while active_project is None:
