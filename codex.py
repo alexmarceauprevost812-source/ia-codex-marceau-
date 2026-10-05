@@ -92,25 +92,60 @@ def choose_font():
     except ValueError:
         console.print("[red]Choix invalide.[/]")
 
+def print_ai_response(text):
+    """Affiche le texte IA et colore automatiquement les blocs de code Markdown."""
+    import re
+    parts = re.split(r"```([a-zA-Z0-9_+.-]*)\\n([\\s\\S]*?)```", text)
+    for i in range(0, len(parts), 3):
+        prose = parts[i]
+        if prose.strip():
+            console.print(prose.strip(), style="tilex.value", highlight=True)
+        if i + 2 < len(parts):
+            language = (parts[i + 1] or "python").lower()
+            code = parts[i + 2].rstrip()
+            lexer_aliases = {
+                "py": "python", "python3": "python",
+                "ps1": "powershell", "sh": "bash",
+                "shell": "bash", "js": "javascript",
+                "ts": "typescript", "html5": "html",
+            }
+            language = lexer_aliases.get(language, language)
+            console.print(Syntax(
+                code,
+                language,
+                theme="dracula",
+                line_numbers=True,
+                word_wrap=False,
+                background_color="default",
+            ))
+
 def ollama(prompt):
     model = config["model"]
     try:
         with requests.post(
             "http://127.0.0.1:11434/api/generate",
-            json={"model": model, "prompt": prompt, "stream": True},
+            json={
+                "model": model,
+                "prompt": prompt + (
+                    "\\nQuand tu écris du code, mets TOUJOURS le code dans un bloc Markdown "
+                    "avec son langage, par exemple ```python. "
+                    "Le terminal TI-LEX utilisera ces blocs pour la coloration syntaxique."
+                ),
+                "stream": True,
+            },
             stream=True, timeout=180
         ) as r:
             r.raise_for_status()
             import json
-            console.print("[bright_green]IA › [/]", end="")
+            full_response = ""
+            console.print("[tilex.success]IA ›[/]")
             for line in r.iter_lines():
                 if line:
-                    token = json.loads(line).get("response", "")
-                    console.print(token, end="", markup=False)
-            console.print()
+                    full_response += json.loads(line).get("response", "")
+            print_ai_response(full_response)
     except Exception as exc:
-        console.print(f"[red]Ollama indisponible : {exc}[/]")
-        console.print(f"[yellow]Vérifie Ollama puis : ollama pull {model}[/]")
+        console.print(f"[tilex.error]Ollama indisponible : {exc}[/]")
+        console.print(f"[tilex.warning]Vérifie Ollama puis : ollama pull {model}[/]")
 
 def project_path(name):
     p = Path(name).expanduser()
