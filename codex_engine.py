@@ -109,6 +109,29 @@ class CodexEngine:
                 continue
         return "\n\n".join(chunks)
 
+    def turbo_task(self, request: str) -> dict | None:
+        """Résout localement une commande simple sans appel IA de planification."""
+        # 1) Nom de fichier explicitement mentionné dans la commande.
+        match = re.search(
+            r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|js|jsx|ts|tsx|html|css|json|md|txt|toml|ya?ml|sql|sh|ps1))",
+            request,
+        )
+        if match:
+            rel = match.group(1).replace("\\", "/")
+            return {"id": "TURBO", "goal": request, "files": [rel], "needs": [rel]}
+
+        # 2) Si le projet ne contient qu'un seul fichier de code, on le cible directement.
+        candidates = []
+        for rel in self.inventory(max_files=80):
+            p = Path(rel)
+            if p.suffix.lower() in TEXT_EXTENSIONS and not rel.lower().endswith(("readme.md", "requirements.txt")):
+                candidates.append(rel)
+        if len(candidates) == 1:
+            rel = candidates[0]
+            return {"id": "TURBO", "goal": request, "files": [rel], "needs": [rel]}
+
+        return None
+
     def make_plan(self, request: str) -> dict:
         files = self.inventory()
         prompt = f"""Tu es l'ARCHITECTE de TI-LEX CODEX, un agent de développement local.
@@ -222,8 +245,20 @@ Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de susp
 
     def build(self, request: str, max_tasks: int = 40) -> CodexResult:
         try:
-            self.status("🧠 Architecture du projet…")
-            plan = self.make_plan(request)
+            task = self.turbo_task(request)
+            if task is not None:
+                self.status("⚡ MODE TURBO • génération directe")
+                plan = {
+                    "summary": "Mode turbo sans planification IA",
+                    "architecture": ["1 commande", "1 fichier", "1 appel de génération"],
+                    "tasks": [task],
+                    "request": request,
+                    "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "turbo": True,
+                }
+            else:
+                self.status("🧠 Architecture du projet…")
+                plan = self.make_plan(request)
             tasks = plan.get("tasks", [])[:1]
             changed = []
             for index, task in enumerate(tasks, 1):
