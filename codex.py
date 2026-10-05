@@ -795,6 +795,9 @@ class CodexLocalApp(App):
         self.secondary_path = None
         self._reveal_states = []
         self._reveal_timer = None
+        self._work_status = "PRÊT"
+        self._work_started = None
+        self._work_timer = None
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -941,8 +944,33 @@ class CodexLocalApp(App):
 
     def _start_codex_command(self, cmd):
         self._codex_busy = True
-        self.notify("CODEX travaille en arrière-plan…")
+        self._work_status = "🧠 Analyse de la demande"
+        self._work_started = time.monotonic()
+        if self._work_timer:
+            self._work_timer.stop()
+        self._work_timer = self.set_interval(0.5, self._work_tick)
+        self.query_one("#editor_title", Static).update("CODEX • 🧠 Analyse de la demande • 0.0s")
+        self.notify("CODEX travaille • progression visible en haut")
         self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=False)
+
+    def _show_codex_status(self, message):
+        self._work_status = message
+        elapsed = 0.0 if self._work_started is None else time.monotonic() - self._work_started
+        self.query_one("#editor_title", Static).update(f"CODEX • {message} • {elapsed:.1f}s")
+
+    def _work_tick(self):
+        if not self._codex_busy or self._work_started is None:
+            return
+        elapsed = time.monotonic() - self._work_started
+        self.query_one("#editor_title", Static).update(
+            f"CODEX • {self._work_status} • {elapsed:.1f}s"
+        )
+
+    def _stop_work_status(self):
+        if self._work_timer:
+            self._work_timer.stop()
+            self._work_timer = None
+        self._work_started = None
 
     def _run_next_codex_command(self):
         if self._codex_queue:
@@ -950,6 +978,7 @@ class CodexLocalApp(App):
             self._start_codex_command(next_cmd)
         else:
             self._codex_busy = False
+            self._stop_work_status()
 
     def _style_chat_message(self, prefix, message, user=False):
         line = Text(prefix, style="bold #FF7A00" if user else "bold #00E5FF")
@@ -1048,18 +1077,24 @@ class CodexLocalApp(App):
 
     def _build_in_background(self, request):
         try:
-            engine = CodexEngine(self.root, model=config["model"])
+            engine = CodexEngine(
+                self.root,
+                model=config["model"],
+                status=lambda message: self.call_from_thread(self._show_codex_status, message),
+            )
             result = engine.build(request)
             self.call_from_thread(self._finish_build, result, engine.last_outputs, engine.last_stats_by_file)
         except Exception as exc:
             self.call_from_thread(self._finish_build_error, str(exc))
 
     def _finish_build_error(self, error):
+        self._stop_work_status()
         self.notify("Erreur moteur CODEX: " + error, severity="error")
         self.query_one("#user_input", Input).focus()
         self._run_next_codex_command()
 
     def _finish_build(self, result, outputs, stats_by_file):
+        self._stop_work_status()
         self.notify(result.message, severity="information" if result.ok else "error")
         if not result.ok:
             self.query_one("#user_input", Input).focus()
