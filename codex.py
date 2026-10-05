@@ -272,6 +272,7 @@ def chat_loop(help_mode=False):
             ollama(("Tu aides l'utilisateur à comprendre TI-LEX CODEX et la programmation. " if help_mode else "Tu es TI-LEX CODEX, assistant de programmation. ") + q)
 
 def main():
+    global active_project
     console.clear()
     console.print(Panel(Text(BANNER, style="bold bright_green", justify="center"), border_style="medium_purple1"))
     if not (Path.home() / ".ti_lex_codex" / "config.json").exists():
