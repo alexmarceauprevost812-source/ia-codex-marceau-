@@ -114,7 +114,7 @@ Projet: {self.root.name}
 Demande: {request}
 Fichiers existants: {json.dumps(files, ensure_ascii=False)}
 
-Conçois le plan le plus simple possible. Une commande simple utilise normalement un seul fichier. Ajoute des fichiers uniquement quand ils sont réellement nécessaires. Pour un gros projet, découpe en modules cohérents.
+Conçois un plan pour UN SEUL fichier cible par commande. Même si la demande pourrait être découpée, cette exécution ne doit créer ou modifier qu’un seul fichier. Choisis le fichier le plus pertinent et concentre toute la réponse dedans.
 Réponds UNIQUEMENT en JSON valide, sans markdown:
 {{
   "summary": "résumé",
@@ -129,7 +129,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
   ]
 }}
 Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; chaque tâche doit rester petite
-(EXACTEMENT 1 fichier par tâche); si plusieurs fichiers sont nécessaires, crée plusieurs tâches successives; utilise le minimum de fichiers nécessaires; ordonne les dépendances."""
+(EXACTEMENT 1 fichier total et 1 seule tâche); ne crée jamais plusieurs tâches pour une même commande."""
         plan = self._json(self._ask(prompt, json_mode=True))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
@@ -207,7 +207,7 @@ Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de susp
         try:
             self.status("🧠 Architecture du projet…")
             plan = self.make_plan(request)
-            tasks = plan.get("tasks", [])[:max_tasks]
+            tasks = plan.get("tasks", [])[:1]
             changed = []
             for index, task in enumerate(tasks, 1):
                 task_id = task.get("id", f"T{index:02}")
