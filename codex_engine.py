@@ -337,9 +337,66 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche pa
         if suffix in {".js", ".jsx", ".ts", ".tsx"}:
             if stripped.lower().startswith(("<!doctype html", "<html")):
                 return False, "Le modèle a généré une page HTML complète au lieu du fichier JavaScript/TypeScript demandé."
+            if re.match(r"(?s)^\s*(?:def|class)\s+[A-Za-z_][A-Za-z0-9_]*\s*[:(]", stripped):
+                return False, "Le modèle a généré du Python au lieu de JavaScript/TypeScript."
             return True, ""
 
+        if suffix in {".md", ".txt"}:
+            return True, ""
+
+        if not stripped:
+            return False, "Le fichier généré est vide."
+
         return True, ""
+    @staticmethod
+    def _clean_model_output(content: str) -> str:
+        content = (content or "").strip()
+        fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
+        if fenced:
+            content = fenced.group(1).strip()
+        return content
+
+    def _repair_until_valid(self, target: str, request: str, content: str, max_repairs: int = 2) -> str:
+        """Répare automatiquement un fichier invalide avant toute sauvegarde."""
+        content = self._clean_model_output(content)
+        if not content:
+            raise ValueError(f"Réponse vide pour {target}")
+
+        for attempt in range(max_repairs + 1):
+            valid, error = self._validate_generated_content(target, content)
+            if valid:
+                if attempt:
+                    self.status(f"✅ Auto-correction réussie • {target} • tentative {attempt}/{max_repairs}")
+                return content
+
+            if attempt >= max_repairs:
+                raise ValueError(
+                    f"Auto-correction impossible pour {target} après {max_repairs} tentative(s): {error}"
+                )
+
+            self.status(
+                f"🧪 Erreur détectée • {target} • réparation {attempt + 1}/{max_repairs} • {error}"
+            )
+            repair_prompt = f"""Tu es le RÉPARATEUR de TI-LEX CODEX.
+
+Fichier cible: {target}
+Demande utilisateur: {request}
+Erreur détectée automatiquement: {error}
+
+CONTENU INVALIDE:
+{content}
+
+Corrige uniquement ce qui est nécessaire pour produire le contenu COMPLET et valide de {target}.
+Respecte strictement le langage correspondant à l'extension.
+Conserve les fonctions, classes, imports et comportements utiles déjà présents.
+Ne renvoie ni explication, ni Markdown, ni diff, ni résumé.
+Retourne uniquement le contenu final complet du fichier."""
+            content = self._clean_model_output(self._ask(repair_prompt, temperature=0.05))
+            if not content:
+                raise ValueError(f"Réparation vide pour {target}")
+
+        return content
+
     def generate_task(self, request: str, task: dict) -> list[dict]:
         targets = [str(x) for x in task.get("files", [])][:1]
         if not targets:
@@ -373,35 +430,12 @@ MODE LABORATOIRE TI-LEX:
 - Ne produis pas de code de vol d'identifiants, malware, persistance, évasion, destruction, ou d'attaque contre des systèmes tiers.
 - Si la demande dangereuse ne peut pas être rendue sûre, transforme-la en simulation défensive locale qui démontre le concept sans capacité offensive réelle."""
         self.status(f"✍ IA • écrit le fichier {target}")
-        content = self._ask(prompt)
-        fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
-        if fenced:
-            content = fenced.group(1)
-        if not content.strip():
-            raise ValueError(f"Réponse vide pour {target}")
-
-        valid, validation_error = self._validate_generated_content(target, content)
-        if not valid:
-            self.status(f"🧪 Validation échouée • {target} • correction automatique")
-            repair_prompt = f"""Tu dois CORRIGER le fichier suivant avant sauvegarde.
-
-Fichier cible: {target}
-Demande utilisateur: {request}
-Erreur détectée par TI-LEX: {validation_error}
-
-CONTENU À CORRIGER:
-{content}
-
-Retourne uniquement le contenu COMPLET et valide du fichier {target}.
-Respecte strictement le langage correspondant à son extension.
-Aucune explication, aucun Markdown, aucun résumé."""
-            content = self._ask(repair_prompt, temperature=0.05)
-            fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
-            if fenced:
-                content = fenced.group(1)
-            valid, validation_error = self._validate_generated_content(target, content)
-            if not valid:
-                raise ValueError(f"Validation refusée pour {target}: {validation_error}")
+        content = self._repair_until_valid(
+            target,
+            request,
+            self._ask(prompt),
+            max_repairs=2,
+        )
 
         target_path = self._safe(target)
         old_content = target_path.read_text(encoding="utf-8", errors="replace") if target_path.is_file() else ""
@@ -426,13 +460,12 @@ CONTENU ACTUEL COMPLET:
 Refais la modification en conservant TOUT ce qui n'est pas directement concerné par la demande.
 Ne raccourcis pas le fichier inutilement. Garde les fonctions, classes, imports et comportements existants.
 Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni explication."""
-            content = self._ask(retry_prompt)
-            fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
-            if fenced:
-                content = fenced.group(1)
-            valid, validation_error = self._validate_generated_content(target, content)
-            if not valid:
-                raise ValueError(f"Validation refusée après correction pour {target}: {validation_error}")
+            content = self._repair_until_valid(
+                target,
+                request,
+                self._ask(retry_prompt),
+                max_repairs=2,
+            )
             new_lines = content.splitlines()
             if len(new_lines) < max(8, int(len(old_lines) * 0.45)):
                 raise ValueError(
@@ -573,4 +606,17 @@ cd ia-codex-marceau-
             return CodexResult(True, f"Projet généré: {len(report['changed'])} fichier(s) modifié(s).",
                                report["changed"], plan)
         except Exception as exc:
+            error_report = {
+                "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "request": request,
+                "error": str(exc),
+            }
+            try:
+                (self.state_dir / "last_error.json").write_text(
+                    json.dumps(error_report, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+            self.status(f"❌ Erreur CODEX • {exc}")
             return CodexResult(False, f"Erreur moteur CODEX: {exc}")
