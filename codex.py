@@ -544,11 +544,13 @@ def show_codex_workspace(filename=None, codex_message=None):
             "Prêt. Écris ta demande dans CODEX LOCAL › pour travailler sur le projet.",
             style="tilex.comment"
         )
+    codex_body.justify = "center"
     console.print(Panel(
         codex_body,
-        title="[#39FF14]🤖 CODEX[/]",
+        title="[#39FF14]🤖 CODEX • ÉCRITURE / GÉNÉRATION[/]",
         border_style="dark_orange",
-        padding=(0, 1)
+        padding=(1, 2),
+        height=8
     ))
 
 def show_diff_preview(filename, old_text, new_text):
