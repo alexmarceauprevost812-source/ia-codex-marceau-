@@ -53,7 +53,20 @@ class CodexEngine:
             raise ValueError(f"Chemin refusé: {rel}")
         return p
 
-    def _ask(self, prompt: str, temperature: float = 0.15, json_mode: bool = False) -> str:
+    def _ask(
+        self,
+        prompt: str,
+        temperature: float = 0.15,
+        json_mode: bool = False,
+        num_predict: int | None = None,
+        read_timeout: int | None = None,
+    ) -> str:
+        # Les petits appels JSON (plan/patch) doivent rester très courts.
+        if num_predict is None:
+            num_predict = 512 if json_mode else 1800
+        if read_timeout is None:
+            read_timeout = 60 if json_mode else 150
+
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -62,15 +75,16 @@ class CodexEngine:
             "options": {
                 "temperature": temperature,
                 "num_ctx": 4096,
-                "num_predict": 3072,
+                "num_predict": num_predict,
             },
         }
         if json_mode:
             payload["format"] = "json"
+
         response = requests.post(
             self.endpoint + "/api/generate",
             json=payload,
-            timeout=(5, 240),
+            timeout=(5, read_timeout),
         )
         response.raise_for_status()
         return response.json().get("response", "").strip()
@@ -100,7 +114,7 @@ class CodexEngine:
                     break
         return out
 
-    def context_for(self, paths: list[str], max_chars: int = 7000) -> str:
+    def context_for(self, paths: list[str], max_chars: int = 5000) -> str:
         chunks, used = [], 0
         for rel in paths:
             try:
@@ -331,7 +345,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
   ]
 }}
 Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche par défaut, 2 tâches uniquement si indispensable; chaque tâche cible EXACTEMENT 1 fichier. Ne crée jamais 3 fichiers pour une seule commande. Donne toujours un vrai nom de fichier avec extension. Si un fichier existant convient, modifie-le plutôt que de créer inutilement un doublon. Si aucun fichier existant ne convient, crée un nouveau fichier au nom clair. Ne génère jamais un résumé à la place du code. N’utilise README.md que si l’utilisateur le demande explicitement."""
-        plan = self._json(self._ask(prompt, json_mode=True))
+        plan = self._json(self._ask(prompt, json_mode=True, num_predict=600, read_timeout=60))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
         plan = self._normalize_plan(plan, request)
@@ -439,7 +453,7 @@ Respecte strictement le langage correspondant à l'extension.
 Conserve les fonctions, classes, imports et comportements utiles déjà présents.
 Ne renvoie ni explication, ni Markdown, ni diff, ni résumé.
 Retourne uniquement le contenu final complet du fichier."""
-            content = self._clean_model_output(self._ask(repair_prompt, temperature=0.05))
+            content = self._clean_model_output(self._ask(repair_prompt, temperature=0.05, num_predict=1400, read_timeout=120))
             if not content:
                 raise ValueError(f"Réparation vide pour {target}")
 
@@ -447,7 +461,7 @@ Retourne uniquement le contenu final complet du fichier."""
 
     def _try_fast_patch(self, target: str, request: str, old_content: str) -> str | None:
         """Tente une modification ciblée pour éviter de régénérer tout le fichier."""
-        if not old_content or len(old_content) > 14000:
+        if not old_content or len(old_content) > 6500:
             return None
 
         lower = request.lower()
@@ -486,7 +500,7 @@ Règles:
 """
         self.status(f"⚡ PATCH RAPIDE • {target}")
         try:
-            payload = self._json(self._ask(prompt, temperature=0.05, json_mode=True))
+            payload = self._json(self._ask(prompt, temperature=0.05, json_mode=True, num_predict=420, read_timeout=45))
         except Exception:
             return None
 
@@ -563,7 +577,7 @@ MODE LABORATOIRE TI-LEX:
         content = self._repair_until_valid(
             target,
             request,
-            self._ask(prompt),
+            self._ask(prompt, num_predict=1800, read_timeout=150),
             max_repairs=2,
         )
 
@@ -591,7 +605,7 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
             content = self._repair_until_valid(
                 target,
                 request,
-                self._ask(retry_prompt),
+                self._ask(retry_prompt, num_predict=1800, read_timeout=150),
                 max_repairs=2,
             )
             new_lines = content.splitlines()
