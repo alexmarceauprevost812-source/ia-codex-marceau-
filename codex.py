@@ -47,12 +47,15 @@ info_highlighter = TILexInfoHighlighter()
 console = Console(theme=TI_LEX_THEME, highlighter=info_highlighter)
 config = load_config()
 session = PromptSession()
+active_project = None
 
 BANNER = """TI-LEX CODEX
 LOCAL AI • CODING • GAMER DARK"""
 
 HELP = """[bold bright_green]-chat[/]              Chat libre avec l'IA
 [bold bright_green]-projet NOM[/]        Créer un nouveau projet local
+[bold bright_cyan]-projets[/]           Voir les projets locaux
+[bold medium_purple1]-selection NOM[/]   Sélectionner un projet pour continuer
 [bold cyan]-ouvrir fichier.py[/]  Afficher un fichier avec coloration
 [bold magenta]-explique fichier[/] Expliquer le code avec l'IA
 [bold yellow]-corrige fichier[/]  Proposer une correction
@@ -136,6 +139,34 @@ def run_file(name):
     else:
         console.print("[red]V1 : exécution automatique limitée aux fichiers Python.[/]")
 
+def projects_root():
+    return Path.home() / "TI-LEX-Projets"
+
+def list_projects():
+    root = projects_root()
+    root.mkdir(parents=True, exist_ok=True)
+    projects = sorted([p for p in root.iterdir() if p.is_dir()])
+    if not projects:
+        console.print("[tilex.warning]Aucun projet local.[/]")
+        return
+    table = Table(title="TI-LEX CODEX • PROJETS", border_style="medium_purple1")
+    table.add_column("#", style="bright_yellow")
+    table.add_column("Projet", style="bright_cyan")
+    table.add_column("Chemin", style="bright_green")
+    for i, p in enumerate(projects, 1):
+        table.add_row(str(i), p.name, str(p))
+    console.print(table)
+
+def select_project(name):
+    global active_project
+    p = projects_root() / name.strip()
+    if not p.is_dir():
+        console.print("[tilex.error]Projet introuvable. Utilise -projets pour voir la liste.[/]")
+        return
+    active_project = p
+    console.print(f"[tilex.success]✓ Projet actif : {p.name}[/]")
+    console.print(f"[tilex.info]DOSSIER : {p}[/]")
+
 def create_project(name):
     name = name.strip()
     if not name:
@@ -145,7 +176,8 @@ def create_project(name):
     if not safe_name:
         console.print("[red]Nom de projet invalide.[/]")
         return
-    root = Path.home() / "TI-LEX-Projets" / safe_name
+    global active_project
+    root = projects_root() / safe_name
     if root.exists():
         console.print(f"[yellow]Le projet existe déjà : {root}[/]")
         return
@@ -177,7 +209,8 @@ def main():
         choose_font()
     fluid(f"Bienvenue dans TI-LEX CODEX. Police configurée : {config['font']}. Écris -aide pour commencer.")
     while True:
-        cmd = session.prompt("TI-LEX CODEX › ").strip()
+        prompt_name = active_project.name if active_project else "aucun-projet"
+        cmd = session.prompt(f"TI-LEX CODEX [{prompt_name}] › ").strip()
         if not cmd:
             continue
         if cmd == "-quitter":
@@ -188,6 +221,10 @@ def main():
             chat_loop(False)
         elif cmd.startswith("-projet "):
             create_project(cmd[8:].strip())
+        elif cmd == "-projets":
+            list_projects()
+        elif cmd.startswith("-selection "):
+            select_project(cmd[11:].strip())
         elif cmd == "-police":
             choose_font()
         elif cmd.startswith("-ouvrir "):
