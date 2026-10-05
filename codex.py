@@ -447,7 +447,7 @@ def show_dev_menu():
         "[dark_orange][10][/] [bright_white]ÉTAT DU PROJET[/]\n"
         "[dark_orange][11][/] [bright_white]HISTORIQUE / SAUVEGARDES[/]\n"
         "[dark_orange][12][/] [bright_white]CONFIGURATION TI-LEX[/]\n"
-        "[dark_orange][13][/] [bright_red]SUPPRIMER UN PROJET[/]\n"
+        "[bold #FF1744][13] SUPPRIMER UN PROJET[/]\n"
         "[dark_orange][14][/] [bright_white]AIDE[/]\n"
         "[dark_orange][00][/] [bright_white]QUITTER[/]\n\n"
         f"[#39FF14]PROJET ACTIF › {project_name}[/]",
