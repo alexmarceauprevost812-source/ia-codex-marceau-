@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import subprocess
+import os
 import shutil
 import sys
 import time
@@ -417,10 +418,14 @@ def create_project(name):
 def project_files():
     if not active_project:
         return []
-    return sorted(
-        p for p in active_project.rglob("*")
-        if p.is_file() and ".git" not in p.parts and ".venv" not in p.parts
-    )
+    ignored = {".git", ".venv", "venv", "node_modules", ".tilex", "__pycache__", ".pytest_cache"}
+    files = []
+    for root, dirs, names in os.walk(active_project):
+        dirs[:] = [d for d in dirs if d not in ignored]
+        root_path = Path(root)
+        for name in names:
+            files.append(root_path / name)
+    return sorted(files)
 
 def show_project_status():
     files = project_files()
@@ -1018,11 +1023,14 @@ class CodexLocalApp(App):
 
         view = self.query_one("#files", ListView)
         view.clear()
-        for p in sorted(
-            x for x in self.root.rglob("*")
-            if x.is_file() and ".git" not in x.parts
-            and ".venv" not in x.parts and ".tilex" not in x.parts
-        ):
+        ignored = {".git", ".venv", "venv", "node_modules", ".tilex", "__pycache__", ".pytest_cache"}
+        visible_files = []
+        for root, dirs, names in os.walk(self.root):
+            dirs[:] = [d for d in dirs if d not in ignored]
+            root_path = Path(root)
+            for name in names:
+                visible_files.append(root_path / name)
+        for p in sorted(visible_files):
             item = ListItem(Label("📄 " + str(p.relative_to(self.root))))
             item.path = p
             view.append(item)
