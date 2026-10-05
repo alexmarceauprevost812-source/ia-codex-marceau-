@@ -182,6 +182,7 @@ def print_ai_response(text):
         fluid(text.strip(), delay=0.025)
 
 def ollama(prompt):
+    """Streaming réel : affiche la réponse pendant qu'Ollama la génère."""
     model = config["model"]
     try:
         with requests.post(
@@ -189,9 +190,8 @@ def ollama(prompt):
             json={
                 "model": model,
                 "prompt": prompt + (
-                    "\\nQuand tu écris du code, mets TOUJOURS le code dans un bloc Markdown "
-                    "avec son langage, par exemple ```python. "
-                    "Le terminal TI-LEX utilisera ces blocs pour la coloration syntaxique."
+                    "\nQuand tu écris du code, mets TOUJOURS le code dans un bloc Markdown "
+                    "avec son langage, par exemple ```python."
                 ),
                 "stream": True,
             },
@@ -199,12 +199,64 @@ def ollama(prompt):
         ) as r:
             r.raise_for_status()
             import json
-            full_response = ""
             console.print("[tilex.success]IA ›[/]")
+            buffer = ""
+            in_code = False
+            language = "python"
+            code_buffer = ""
+
             for line in r.iter_lines():
-                if line:
-                    full_response += json.loads(line).get("response", "")
-            print_ai_response(full_response)
+                if not line:
+                    continue
+                token = json.loads(line).get("response", "")
+                buffer += token
+
+                # Détecte l'ouverture d'un bloc de code.
+                if not in_code and "```" in buffer:
+                    before, after = buffer.split("```", 1)
+                    if before:
+                        console.print(before, end="", style="tilex.value", highlight=True)
+                    if "\n" in after:
+                        lang, rest = after.split("\n", 1)
+                        language = lang.strip() or "python"
+                        language = {"py":"python","python3":"python","ps1":"powershell",
+                                    "sh":"bash","shell":"bash","js":"javascript",
+                                    "ts":"typescript"}.get(language.lower(), language.lower())
+                        code_buffer = rest
+                        buffer = ""
+                        in_code = True
+                    else:
+                        buffer = "```" + after
+                    continue
+
+                if in_code:
+                    code_buffer += buffer
+                    buffer = ""
+                    if "```" in code_buffer:
+                        code, tail = code_buffer.split("```", 1)
+                        console.print(Syntax(code.rstrip(), language, theme=CODE_STYLE,
+                                             line_numbers=True, word_wrap=False,
+                                             background_color="default"))
+                        in_code = False
+                        code_buffer = ""
+                        buffer = tail
+                    continue
+
+                # Texte normal : petit flux lisible au lieu d'un gros bloc final.
+                if len(buffer) >= 3 or "\n" in buffer:
+                    console.print(buffer, end="", style="tilex.value", highlight=True)
+                    buffer = ""
+                    time.sleep(0.018)
+
+            # Vide ce qui reste à la fin du stream.
+            if in_code and code_buffer:
+                # Si le modèle n'a pas fermé le bloc, on montre quand même le code coloré.
+                console.print(Syntax(code_buffer.rstrip(), language, theme=CODE_STYLE,
+                                     line_numbers=True, word_wrap=False,
+                                     background_color="default"))
+            elif buffer:
+                console.print(buffer, end="", style="tilex.value", highlight=True)
+            console.print()
     except Exception as exc:
         console.print(f"[tilex.error]Ollama indisponible : {exc}[/]")
         console.print(f"[tilex.warning]Vérifie Ollama puis : ollama pull {model}[/]")
