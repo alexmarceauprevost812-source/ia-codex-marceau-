@@ -780,12 +780,16 @@ class CodexLocalApp(App):
         event.input.value = ""
         if cmd.lower() == "/chat":
             self.mode = "chat"
-            self.query_one("#editor_title", Static).update("CHAT IA • /codex POUR REVENIR AU CODE")
+            self.query_one("#editor", TextArea).display = False
+            self.query_one("#chat_log", RichLog).display = True
+            self.query_one("#editor_title", Static).update("CHAT IA • NEON • /codex POUR REVENIR")
             self.query_one("#editor", TextArea).text = "=== TI-LEX CHAT IA ===\n\nÉcris ton message en bas.\n/codex = retour au CODEX."
             self.query_one("#user_input", Input).placeholder = "💬 CHAT IA › écris ton message…"
             return
         if cmd.lower() == "/codex":
             self.mode = "codex"
+            self.query_one("#chat_log", RichLog).display = False
+            self.query_one("#editor", TextArea).display = True
             self.query_one("#editor_title", Static).update("CODEX • ÉCRITURE / GÉNÉRATION")
             self.query_one("#user_input", Input).placeholder = "✍ CODEX LOCAL › écris ta commande ici…"
             if self.current_path and self.current_path.is_file():
