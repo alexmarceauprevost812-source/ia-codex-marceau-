@@ -159,6 +159,34 @@ class CodexEngine:
         # L'architecte décide s'il faut modifier un fichier existant ou en créer un nouveau.
         return None
 
+    def _normalize_plan(self, plan: dict, request: str) -> dict:
+        """Nettoie le plan IA: 1-2 fichiers valides, sans doublons."""
+        raw_tasks = plan.get("tasks", []) if isinstance(plan, dict) else []
+        clean_tasks = []
+        seen = set()
+        for index, task in enumerate(raw_tasks[:2], 1):
+            if not isinstance(task, dict):
+                continue
+            files = [str(x).strip().replace("\\", "/") for x in task.get("files", []) if str(x).strip()]
+            if not files:
+                continue
+            rel = files[0]
+            self._safe(rel)
+            key = rel.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            clean_tasks.append({
+                "id": str(task.get("id") or f"T{index:02}"),
+                "goal": str(task.get("goal") or request),
+                "files": [rel],
+                "needs": [str(x).strip().replace("\\", "/") for x in task.get("needs", [])[:12] if str(x).strip()],
+            })
+
+        if not clean_tasks:
+            raise ValueError("Le plan IA n'a choisi aucun fichier valide.")
+        plan["tasks"] = clean_tasks
+        return plan
     def make_plan(self, request: str) -> dict:
         files = self.inventory()
         prompt = f"""Tu es l'ARCHITECTE de TI-LEX CODEX, un agent de développement local.
@@ -187,6 +215,7 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche pa
         plan = self._json(self._ask(prompt, json_mode=True))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
+        plan = self._normalize_plan(plan, request)
         plan["request"] = request
         plan["created_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         (self.state_dir / "plan.json").write_text(
