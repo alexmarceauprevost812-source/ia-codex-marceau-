@@ -167,7 +167,9 @@ Projet: {self.root.name}
 Demande: {request}
 Fichiers existants: {json.dumps(files, ensure_ascii=False)}
 
-Conçois un plan professionnel avec 1 fichier cible par défaut, ou 2 fichiers MAXIMUM seulement si la demande exige réellement deux fichiers distincts. Choisis de vrais noms de fichiers avec une extension adaptée au langage. N’utilise jamais README.md comme remplacement d’un fichier de code sauf si la demande parle explicitement du README.
+Conçois un plan professionnel en utilisant LE MINIMUM DE FICHIERS NÉCESSAIRE.
+Règle principale: utilise 1 seul fichier par défaut. Crée un nouveau fichier si c'est réellement le bon endroit pour le code demandé. Utilise 2 fichiers MAXIMUM seulement si la séparation est techniquement nécessaire ou explicitement demandée par l'utilisateur. N'éparpille jamais une petite modification dans plusieurs fichiers. Si tout peut être proprement fait dans 1 fichier, fais-le dans 1 seul fichier.
+Choisis de vrais noms de fichiers avec une extension adaptée au langage. Respecte un fichier explicitement nommé par l'utilisateur. N’utilise jamais README.md comme remplacement d’un fichier de code sauf si la demande parle explicitement du README.
 TI-LEX est un CODEX DE LABORATOIRE: quand la demande concerne un test, conçois du code réellement exécutable dans un labo local autorisé, avec des données fictives ou des cibles locales comme 127.0.0.1. Favorise les tests unitaires, intégration, diagnostics, mocks, serveurs locaux et simulations défensives. Ne planifie pas de vol d'identifiants, malware, persistance, contournement de sécurité, destruction ou attaque contre des systèmes tiers.
 Réponds UNIQUEMENT en JSON valide, sans markdown:
 {{
@@ -182,7 +184,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
     }}
   ]
 }}
-Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 ou 2 tâches maximum; chaque tâche cible EXACTEMENT 1 fichier. Donne toujours un vrai nom de fichier avec extension. Ne génère jamais un résumé à la place du code. N’utilise README.md que si l’utilisateur le demande explicitement."""
+Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche par défaut, 2 tâches uniquement si indispensable; chaque tâche cible EXACTEMENT 1 fichier. Ne crée jamais 3 fichiers pour une seule commande. Donne toujours un vrai nom de fichier avec extension. Si un fichier existant convient, modifie-le plutôt que de créer inutilement un doublon. Si aucun fichier existant ne convient, crée un nouveau fichier au nom clair. Ne génère jamais un résumé à la place du code. N’utilise README.md que si l’utilisateur le demande explicitement."""
         plan = self._json(self._ask(prompt, json_mode=True))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
@@ -238,6 +240,7 @@ MODE LABORATOIRE TI-LEX:
 - Préfère des fonctions testables et une section main quand le langage s'y prête.
 - Ne produis pas de code de vol d'identifiants, malware, persistance, évasion, destruction, ou d'attaque contre des systèmes tiers.
 - Si la demande dangereuse ne peut pas être rendue sûre, transforme-la en simulation défensive locale qui démontre le concept sans capacité offensive réelle."""
+        self.status(f"✍ IA • écrit le fichier {target}")
         content = self._ask(prompt)
         fenced = re.fullmatch(r"```(?:[A-Za-z0-9_+.-]+)?\s*([\s\S]*?)\s*```", content)
         if fenced:
@@ -393,7 +396,10 @@ cd ia-codex-marceau-
             for index, task in enumerate(tasks, 1):
                 task_id = task.get("id", f"T{index:02}")
                 self.status(f"⚙ {task_id} • {task.get('goal', 'génération')} ({index}/{len(tasks)})")
+                target_names = ", ".join(str(x) for x in task.get("files", [])[:1]) or "fichier"
+                self.status(f"🎯 Fichier choisi • {target_names}")
                 items = self.generate_task(request, task)
+                self.status(f"💾 Sauvegarde • {target_names}")
                 changed.extend(self.apply_files(items))
             report = {
                 "request": request,
@@ -404,6 +410,7 @@ cd ia-codex-marceau-
             (self.state_dir / "last_run.json").write_text(
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+            self.status("✅ Génération terminée")
             self._append_readme_summary(request, report["changed"], plan)
             return CodexResult(True, f"Projet généré: {len(report['changed'])} fichier(s) modifié(s).",
                                report["changed"], plan)
