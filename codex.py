@@ -830,7 +830,12 @@ class CodexLocalApp(App):
                 line.append(message, style="#FFFFFF")
             else:
                 line.append("IA › ", style="bold #00E5FF")
-                line.append(message, style="#87CEFA")
+                chunks = message.split("`")
+                for n, chunk in enumerate(chunks):
+                    if n % 2:
+                        line.append(chunk, style="bold #FF7A00")
+                    else:
+                        line.append(chunk, style="#87CEFA")
             log.write(line)
 
     def _chat_in_background(self, message):
