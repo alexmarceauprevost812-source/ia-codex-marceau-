@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import time
 import requests
@@ -431,12 +432,22 @@ def search_project(term):
     console.print(table if results else "[tilex.warning]Aucun résultat.[/]")
 
 def show_dev_menu():
+    project_name = active_project.name if active_project else "AUCUN"
     console.print(Panel(
-        "[tilex.action]PROJET[/]  /nouveau  /projets  /etat  /fichiers\n"
-        "[tilex.action]CODE[/]    /ouvrir  /chercher  /explique  /corrige  /run\n"
-        "[tilex.action]IA[/]      /chat    /aide     /police    /quitter",
-        title=f"TI-LEX CODEX • {active_project.name}",
-        border_style="medium_purple1"
+        "[dark_orange][01][/] [bright_white]CONTINUER / CHANGER DE PROJET[/]\n"
+        "[dark_orange][02][/] [bright_white]NOUVEAU PROJET[/]\n"
+        "[dark_orange][03][/] [bright_white]ÉDITEUR / FICHIERS[/]\n"
+        "[dark_orange][04][/] [bright_white]ASSISTANT IA[/]\n"
+        "[dark_orange][05][/] [bright_white]EXÉCUTER UN FICHIER[/]\n"
+        "[dark_orange][06][/] [bright_white]RECHERCHER DANS LE CODE[/]\n"
+        "[dark_orange][07][/] [bright_white]ÉTAT DU PROJET[/]\n"
+        "[dark_orange][08][/] [bright_white]CONFIGURATION / POLICE[/]\n"
+        "[dark_orange][09][/] [bright_red]SUPPRIMER UN PROJET[/]\n"
+        "[dark_orange][10][/] [bright_white]AIDE[/]\n"
+        "[dark_orange][00][/] [bright_white]QUITTER[/]\n\n"
+        f"[#39FF14]PROJET ACTIF › {project_name}[/]",
+        title="[#39FF14]TI-LEX CODEX • MENU DÉVELOPPEUR[/]",
+        border_style="#39FF14"
     ))
 
 def startup_menu():
