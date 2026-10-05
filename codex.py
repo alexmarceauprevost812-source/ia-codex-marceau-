@@ -22,7 +22,28 @@ from textual.app import App, ComposeResult
 from codex_engine import CodexEngine
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Footer, ListView, ListItem, Label, TextArea, Input, Button, Static, RichLog
+from textual.widgets.text_area import TextAreaTheme
 from textual.binding import Binding
+
+TI_LEX_TEXTAREA_THEME = TextAreaTheme(
+    name="ti_lex_neon",
+    base_style=Style(color="#EAF6FF", bgcolor="#000000"),
+    syntax_styles={
+        "comment": Style(color="#7D8590", italic=True),
+        "keyword": Style(color="#D65CFF", bold=True),
+        "string": Style(color="#39FF14"),
+        "number": Style(color="#FFFF00"),
+        "operator": Style(color="#FF1493"),
+        "function": Style(color="#00BFFF", bold=True),
+        "function.call": Style(color="#00BFFF"),
+        "type": Style(color="#00E5FF"),
+        "class": Style(color="#B026FF", bold=True),
+        "constant": Style(color="#00E5FF"),
+        "variable": Style(color="#FFFFFF"),
+        "attribute": Style(color="#FF7A00"),
+        "punctuation": Style(color="#F0F6FC"),
+    },
+)
 
 from config import FONTS, load_config, save_config
 
@@ -754,6 +775,9 @@ class CodexLocalApp(App):
         yield Footer()
 
     def on_mount(self):
+        editor = self.query_one("#editor", TextArea)
+        editor.register_theme(TI_LEX_TEXTAREA_THEME)
+        editor.theme = "ti_lex_neon"
         view = self.query_one("#files", ListView)
         for p in project_files():
             rel = p.relative_to(self.root)
