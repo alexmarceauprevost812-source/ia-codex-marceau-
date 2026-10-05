@@ -52,8 +52,15 @@ class CodexEngine:
         return p
 
     def _ask(self, prompt: str, temperature: float = 0.15, json_mode: bool = False) -> str:
-        payload = {"model": self.model, "prompt": prompt, "stream": False,
-                   "options": {"temperature": temperature}}
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_ctx": 4096,
+            },
+        }
         if json_mode:
             payload["format"] = "json"
         response = requests.post(
@@ -89,7 +96,7 @@ class CodexEngine:
                     break
         return out
 
-    def context_for(self, paths: list[str], max_chars: int = 36000) -> str:
+    def context_for(self, paths: list[str], max_chars: int = 12000) -> str:
         chunks, used = [], 0
         for rel in paths:
             try:
@@ -147,17 +154,8 @@ class CodexEngine:
         if mentions_file:
             return None
 
-        # 4) Fallback seulement quand AUCUN nom de fichier n'a été demandé.
-        # Si le projet ne contient qu'un seul fichier de code, on peut le cibler.
-        candidates = []
-        for rel in self.inventory(max_files=80):
-            p = Path(rel)
-            if p.suffix.lower() in TEXT_EXTENSIONS and not rel.lower().endswith(("readme.md", "requirements.txt")):
-                candidates.append(rel)
-        if len(candidates) == 1:
-            rel = candidates[0]
-            return {"id": "TURBO", "goal": request, "files": [rel], "needs": [rel]}
-
+        # 4) Aucun fichier explicite: ne force jamais main.py ou un autre fichier.
+        # L'architecte décide s'il faut modifier un fichier existant ou en créer un nouveau.
         return None
 
     def make_plan(self, request: str) -> dict:
@@ -411,7 +409,6 @@ cd ia-codex-marceau-
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             self.status("✅ Génération terminée")
-            self._append_readme_summary(request, report["changed"], plan)
             return CodexResult(True, f"Projet généré: {len(report['changed'])} fichier(s) modifié(s).",
                                report["changed"], plan)
         except Exception as exc:
