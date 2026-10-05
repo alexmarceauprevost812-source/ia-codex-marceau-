@@ -432,12 +432,112 @@ def search_project(term):
         table.add_row(path, str(line_no), line[:100])
     console.print(table if results else "[tilex.warning]Aucun résultat.[/]")
 
+def show_project_tree():
+    if not active_project:
+        console.print("[tilex.warning]Aucun projet actif.[/]")
+        return
+    console.print(f"[bold #39FF14]{active_project.name}/[/]")
+    paths = sorted(
+        p for p in active_project.rglob("*")
+        if ".git" not in p.parts and ".venv" not in p.parts
+    )
+    for p in paths[:200]:
+        rel = p.relative_to(active_project)
+        depth = len(rel.parts) - 1
+        icon = "📁" if p.is_dir() else "📄"
+        console.print("    " * depth + f"├── {icon} [bright_white]{p.name}[/]")
+    if len(paths) > 200:
+        console.print(f"[tilex.warning]… {len(paths) - 200} éléments supplémentaires non affichés.[/]")
+
+def show_readme():
+    if not active_project:
+        console.print("[tilex.warning]Aucun projet actif.[/]")
+        return
+    readme = active_project / "README.md"
+    if not readme.is_file():
+        console.print("[tilex.warning]README.md introuvable.[/]")
+        return
+    console.print(Panel(
+        readme.read_text(encoding="utf-8", errors="replace"),
+        title=f"[#39FF14]README • {active_project.name}[/]",
+        border_style="#39FF14"
+    ))
+
+def codex_local_lab():
+    if not active_project:
+        console.print("[tilex.warning]Sélectionne d'abord un projet avec 01 ou crée-en un avec 02.[/]")
+        return
+
+    while True:
+        console.print(Panel(
+            "[dark_orange][01][/] [bright_white]EXPLORATEUR / ARBORESCENCE[/]\n"
+            "[dark_orange][02][/] [bright_white]OUVRIR UN FICHIER[/]\n"
+            "[dark_orange][03][/] [bright_white]README.md[/]\n"
+            "[dark_orange][04][/] [bright_white]ASSISTANT IA DU PROJET[/]\n"
+            "[dark_orange][05][/] [bright_white]RUN • PYTHON[/]\n"
+            "[dark_orange][06][/] [bright_white]PREVIEW LOCAL[/]\n"
+            "[dark_orange][07][/] [bright_white]BUILD LOCAL[/]\n"
+            "[dark_orange][08][/] [bright_white]LOGS[/]\n"
+            "[dark_orange][09][/] [bright_white]TESTS[/]\n"
+            "[dark_orange][10][/] [bright_white]DÉPENDANCES[/]\n"
+            "[dark_orange][11][/] [bright_white]RECHERCHE DANS LE CODE[/]\n"
+            "[dark_orange][12][/] [bright_white]GIT LOCAL[/]\n"
+            "[dark_orange][13][/] [bright_white]SNAPSHOTS / SAUVEGARDES[/]\n"
+            "[dark_orange][14][/] [bright_white]ÉTAT DU PROJET[/]\n"
+            "[dark_orange][15][/] [bright_white]SETTINGS[/]\n"
+            "[dark_orange][00][/] [#39FF14]RETOUR AU MENU PRINCIPAL[/]\n\n"
+            f"[#39FF14]PROJET › {active_project.name}[/]\n"
+            f"[bright_cyan]LOCAL › {active_project}[/]",
+            title="[#39FF14]CODEX LOCAL • LABORATOIRE[/]",
+            border_style="#39FF14"
+        ))
+        choice = session.prompt("LAB › ").strip()
+
+        if choice == "00":
+            return
+        if choice == "01":
+            show_project_tree()
+        elif choice == "02":
+            show_project_files()
+            name = session.prompt("Fichier à ouvrir › ").strip()
+            if name:
+                show_file(name)
+        elif choice == "03":
+            show_readme()
+        elif choice == "04":
+            console.print("[tilex.info]IA DU PROJET • /retour pour revenir au laboratoire[/]")
+            while True:
+                q = session.prompt("PROJET + IA › ").strip()
+                if q in ("/retour", "-retour"):
+                    break
+                if q:
+                    ollama(project_context() + "\nDemande : " + q)
+        elif choice == "05":
+            name = session.prompt("Fichier Python à exécuter › ").strip()
+            if name:
+                run_file(name)
+        elif choice in ("06", "07", "08", "09", "10", "12", "13", "15"):
+            labels = {
+                "06": "PREVIEW LOCAL", "07": "BUILD LOCAL", "08": "LOGS",
+                "09": "TESTS", "10": "DÉPENDANCES", "12": "GIT LOCAL",
+                "13": "SNAPSHOTS / SAUVEGARDES", "15": "SETTINGS"
+            }
+            console.print(f"[tilex.warning]{labels[choice]} : module prévu pour la prochaine étape de CODEX LOCAL.[/]")
+        elif choice == "11":
+            term = session.prompt("Texte à rechercher › ").strip()
+            search_project(term)
+        elif choice == "14":
+            show_project_status()
+        else:
+            console.print("[tilex.warning]Choix invalide.[/]")
+
+
 def show_dev_menu():
     project_name = active_project.name if active_project else "AUCUN"
     console.print(Panel(
         "[dark_orange][01][/] [bright_white]CONTINUER / CHANGER DE PROJET[/]\n"
         "[dark_orange][02][/] [bright_white]NOUVEAU PROJET[/]\n"
-        "[dark_orange][03][/] [bright_white]ÉDITEUR / FICHIERS[/]\n"
+        "[dark_orange][03][/] [bright_white]CODEX LOCAL • LABORATOIRE[/]\n"
         "[dark_orange][04][/] [bright_white]ASSISTANT IA[/]\n"
         "[dark_orange][05][/] [bright_white]EXÉCUTER LE PROJET[/]\n"
         "[dark_orange][06][/] [bright_white]RECHERCHER DANS LE CODE[/]\n"
@@ -598,7 +698,10 @@ def main():
             name = session.prompt("Nom du projet › ").strip()
             create_project(name)
             show_dev_menu()
-        elif cmd in ("03", "/fichiers", "-fichiers"):
+        elif cmd in ("03", "/lab", "-lab"):
+            codex_local_lab()
+            show_dev_menu()
+        elif cmd in ("/fichiers", "-fichiers"):
             if active_project:
                 show_project_files()
             else:
