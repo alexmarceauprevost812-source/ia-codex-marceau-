@@ -758,7 +758,12 @@ class CodexLocalApp(App):
     #user_input { dock: bottom; height: 3; background: #000000; color: #ffffff; border: solid #ff7a00; }
     Footer { background: #000000; color: #ffffff; }
     """
-    BINDINGS = [Binding("ctrl+s", "save_file", "Sauvegarder"), Binding("escape", "quit", "Retour")]
+    BINDINGS = [
+        Binding("ctrl+s", "save_file", "Sauvegarder"),
+        Binding("ctrl+shift+c", "copy_current_line", "Copier ligne"),
+        Binding("ctrl+shift+v", "paste_current_line", "Coller ligne"),
+        Binding("escape", "quit", "Retour"),
+    ]
 
     def __init__(self, root):
         super().__init__()
@@ -796,6 +801,8 @@ class CodexLocalApp(App):
                 yield Button("💾 SAUVEGARDER", id="tool_save")
                 yield Button("📋 COPIER", id="tool_copy")
                 yield Button("📥 COLLER", id="tool_paste")
+                yield Button("📋 COPIER LIGNE", id="tool_copy_line")
+                yield Button("📥 COLLER LIGNE", id="tool_paste_line")
         yield Input(placeholder="✍ CODEX LOCAL › écris ta commande ici…", id="user_input")
         yield Footer()
 
@@ -1160,6 +1167,20 @@ class CodexLocalApp(App):
                 + f" • -{s['deleted']} supprimées"
             )
 
+    def action_copy_current_line(self):
+        editor = self.query_one("#editor", TextArea)
+        row, _column = editor.cursor_location
+        editor.select_line(row)
+        editor.action_copy()
+        self.notify("Ligne " + str(row + 1) + " copiée")
+        editor.focus()
+
+    def action_paste_current_line(self):
+        editor = self.query_one("#editor", TextArea)
+        editor.action_paste()
+        self.notify("Ligne collée")
+        editor.focus()
+
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
             self.action_save_file()
@@ -1172,6 +1193,10 @@ class CodexLocalApp(App):
             editor.action_paste()
             editor.focus()
             self.notify("Code collé")
+        elif event.button.id == "tool_copy_line":
+            self.action_copy_current_line()
+        elif event.button.id == "tool_paste_line":
+            self.action_paste_current_line()
         elif event.button.id == "tool_run":
             self.action_save_file()
             if self.current_path and self.current_path.suffix == ".py":
