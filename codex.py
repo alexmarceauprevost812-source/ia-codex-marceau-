@@ -22,6 +22,7 @@ BANNER = """TI-LEX CODEX
 LOCAL AI • CODING • GAMER DARK"""
 
 HELP = """[bold bright_green]-chat[/]              Chat libre avec l'IA
+[bold bright_green]-projet NOM[/]        Créer un nouveau projet local
 [bold cyan]-ouvrir fichier.py[/]  Afficher un fichier avec coloration
 [bold magenta]-explique fichier[/] Expliquer le code avec l'IA
 [bold yellow]-corrige fichier[/]  Proposer une correction
@@ -105,6 +106,28 @@ def run_file(name):
     else:
         console.print("[red]V1 : exécution automatique limitée aux fichiers Python.[/]")
 
+def create_project(name):
+    name = name.strip()
+    if not name:
+        console.print("[yellow]Utilisation : -projet NOM[/]")
+        return
+    safe_name = "".join(ch for ch in name if ch.isalnum() or ch in "-_ ").strip().replace(" ", "-")
+    if not safe_name:
+        console.print("[red]Nom de projet invalide.[/]")
+        return
+    root = Path.home() / "TI-LEX-Projets" / safe_name
+    if root.exists():
+        console.print(f"[yellow]Le projet existe déjà : {root}[/]")
+        return
+    root.mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / "main.py").write_text('print("Bonjour TI-LEX")\n', encoding="utf-8")
+    (root / "README.md").write_text(f"# {safe_name}\n\nProjet local créé avec TI-LEX CODEX.\n", encoding="utf-8")
+    (root / "requirements.txt").write_text("", encoding="utf-8")
+    console.print(f"[bright_green]✓ Nouveau projet local créé : {root}[/]")
+    console.print("[cyan]Fichiers : main.py, README.md, requirements.txt, src/[/]")
+    console.print("[dim]Aucun fichier n'a été envoyé sur Internet ou GitHub.[/]")
+
 def chat_loop(help_mode=False):
     if help_mode:
         console.clear()
@@ -133,6 +156,8 @@ def main():
             chat_loop(True)
         elif cmd == "-chat":
             chat_loop(False)
+        elif cmd.startswith("-projet "):
+            create_project(cmd[8:].strip())
         elif cmd == "-police":
             choose_font()
         elif cmd.startswith("-ouvrir "):
