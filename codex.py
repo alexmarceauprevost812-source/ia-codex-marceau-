@@ -705,16 +705,21 @@ def images_lab():
 
 class CodexLocalApp(App):
     CSS = """
-    Screen { background: #0d1117; color: white; }
-    #brand { height: 3; color: #39ff14; text-style: bold; content-align: center middle; border: solid #00e5ff; }
+    Screen { background: #000000; color: #ffffff; }
+    #brand { height: 11; background: #000000; color: #39ff14; text-style: bold; content-align: left top; border: none; padding: 0 1; }
     #workspace { height: 1fr; }
-    #files { width: 25%; border: solid #39ff14; }
-    #center { width: 1fr; border: solid #00e5ff; }
-    #tools { width: 18%; border: solid #ff7a00; padding: 0 1; }
-    #tools Button { width: 100%; height: 3; margin: 0; }
-    #editor_title { height: 3; content-align: center middle; color: #39ff14; text-style: bold; }
-    #editor { height: 1fr; }
-    #user_input { dock: bottom; height: 3; border: solid #ff7a00; }
+    #files { width: 25%; background: #000000; color: #ffffff; border: solid #39ff14; }
+    #files ListItem { background: #000000; color: #ffffff; }
+    #files ListItem.--highlight { background: #001a00; color: #39ff14; }
+    #center { width: 1fr; background: #000000; border: solid #00e5ff; }
+    #tools { width: 18%; background: #000000; color: #ffffff; border: solid #ff7a00; padding: 0 1; }
+    #tools Static { background: #000000; color: #ffffff; }
+    #tools Button { width: 100%; height: 3; margin: 0; background: #000000; color: #ffffff; border: none; }
+    #tools Button:focus { background: #001a00; color: #39ff14; text-style: bold; }
+    #editor_title { height: 3; background: #000000; content-align: center middle; color: #39ff14; text-style: bold; }
+    #editor { height: 1fr; background: #000000; color: #ffffff; }
+    #user_input { dock: bottom; height: 3; background: #000000; color: #ffffff; border: solid #ff7a00; }
+    Footer { background: #000000; color: #ffffff; }
     """
     BINDINGS = [Binding("ctrl+s", "save_file", "Sauvegarder"), Binding("escape", "quit", "Retour")]
 
@@ -724,7 +729,7 @@ class CodexLocalApp(App):
         self.current_path = None
 
     def compose(self) -> ComposeResult:
-        yield Static("TI-LEX CODEX  •  LOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
+        yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
         with Horizontal(id="workspace"):
             yield ListView(id="files")
             with Vertical(id="center"):
