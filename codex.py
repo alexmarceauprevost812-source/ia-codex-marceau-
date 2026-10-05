@@ -8,6 +8,9 @@ import requests
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.style import Style
+from pygments.style import Style as PygmentsStyle
+from pygments.token import Comment, Keyword, Name, Number, Operator, String, Punctuation, Generic
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
@@ -15,6 +18,35 @@ from rich.highlighter import RegexHighlighter
 from prompt_toolkit import PromptSession
 
 from config import FONTS, load_config, save_config
+
+class TILexCodeStyle(PygmentsStyle):
+    """Palette TI-LEX sombre inspirée des éditeurs modernes."""
+    background_color = "#0d1117"
+    highlight_color = "#263040"
+    styles = {
+        Comment: "italic #8b949e",
+        Keyword: "bold #c792ea",
+        Keyword.Type: "#82aaff",
+        Name: "#e6edf3",
+        Name.Builtin: "#79c0ff",
+        Name.Function: "bold #82aaff",
+        Name.Class: "bold #d2a8ff",
+        Name.Namespace: "#d2a8ff",
+        Name.Decorator: "#ffa657",
+        Name.Exception: "#ff7b72",
+        Name.Constant: "#79c0ff",
+        Name.Variable: "#e6edf3",
+        String: "#7ee787",
+        String.Doc: "italic #56d364",
+        Number: "#f2cc60",
+        Operator: "#ff9bce",
+        Punctuation: "#c9d1d9",
+        Generic.Heading: "bold #79c0ff",
+        Generic.Subheading: "bold #d2a8ff",
+        Generic.Error: "#ff7b72",
+    }
+
+CODE_STYLE = TILexCodeStyle
 
 TI_LEX_THEME = Theme({
     "tilex.command": "bold bright_cyan",
@@ -115,7 +147,7 @@ def print_ai_response(text):
         language = aliases.get(language, language)
         code = match.group(2).rstrip()
         console.print(Panel(
-            Syntax(code, language, theme="monokai", line_numbers=True,
+            Syntax(code, language, theme=CODE_STYLE, line_numbers=True,
                    word_wrap=False, background_color="default"),
             title=f"[tilex.action]CODE • {language.upper()}[/]",
             border_style="bright_cyan",
@@ -137,7 +169,7 @@ def print_ai_response(text):
     score = sum(1 for signal in python_signals if signal in text)
     if score >= 2:
         console.print(Panel(
-            Syntax(text.strip(), "python", theme="monokai", line_numbers=True,
+            Syntax(text.strip(), "python", theme=CODE_STYLE, line_numbers=True,
                    word_wrap=False, background_color="default"),
             title="[tilex.action]CODE • PYTHON[/]",
             border_style="bright_cyan",
@@ -185,7 +217,7 @@ def show_file(name):
         console.print("[tilex.error]Fichier introuvable.[/]")
         return
     lexer = "python" if p.suffix == ".py" else "text"
-    console.print(Syntax(p.read_text(errors="replace"), lexer, theme="dracula", line_numbers=True, word_wrap=True))
+    console.print(Syntax(p.read_text(errors="replace"), lexer, theme=CODE_STYLE, line_numbers=True, word_wrap=True))
 
 def ai_file(name, action):
     p = project_path(name)
