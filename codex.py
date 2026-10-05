@@ -785,28 +785,40 @@ class CodexLocalApp(App):
         elif cmd.lower() in {"save", "sauve", "sauvegarde"}:
             self.action_save_file()
         elif cmd:
-            self.notify("CODEX construit le projet. La génération peut prendre plusieurs minutes.")
-            engine = CodexEngine(self.root, model=config["model"], status=self.notify)
-            result = engine.build(cmd)
-            self.notify(result.message, severity="information" if result.ok else "error")
-            if result.ok:
-                view = self.query_one("#files", ListView)
-                view.clear()
-                for p in sorted(x for x in self.root.rglob("*") if x.is_file() and ".git" not in x.parts and ".venv" not in x.parts and ".tilex" not in x.parts):
-                    item = ListItem(Label("📄 " + str(p.relative_to(self.root))))
-                    item.path = p
-                    view.append(item)
-                if result.changed:
-                    target = (self.root / result.changed[-1]).resolve()
-                    if target.is_file():
-                        self.current_path = target
-                        generated_code = engine.last_content or target.read_text(encoding="utf-8", errors="replace")
-                        self.query_one("#editor", TextArea).text = generated_code
-                        self.query_one("#editor_title", Static).update(
-                            "CODEX • CODE GÉNÉRÉ + SAUVEGARDÉ • 📄 " + target.name
-                            + " • " + str(len(result.changed)) + " fichier(s)"
-                        )
-                        self.query_one("#editor", TextArea).focus()
+            self.notify("CODEX travaille en arrière-plan…")
+            self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=True)
+
+    def _build_in_background(self, request):
+        engine = CodexEngine(self.root, model=config["model"])
+        result = engine.build(request)
+        self.call_from_thread(self._finish_build, result, engine.last_content)
+
+    def _finish_build(self, result, generated_code):
+        self.notify(result.message, severity="information" if result.ok else "error")
+        if not result.ok:
+            return
+        view = self.query_one("#files", ListView)
+        view.clear()
+        for p in sorted(
+            x for x in self.root.rglob("*")
+            if x.is_file() and ".git" not in x.parts
+            and ".venv" not in x.parts and ".tilex" not in x.parts
+        ):
+            item = ListItem(Label("📄 " + str(p.relative_to(self.root))))
+            item.path = p
+            view.append(item)
+        if result.changed:
+            target = (self.root / result.changed[-1]).resolve()
+            if target.is_file():
+                self.current_path = target
+                self.query_one("#editor", TextArea).text = (
+                    generated_code or target.read_text(encoding="utf-8", errors="replace")
+                )
+                self.query_one("#editor_title", Static).update(
+                    "CODEX • CODE GÉNÉRÉ + SAUVEGARDÉ • 📄 "
+                    + target.name + " • " + str(len(result.changed)) + " fichier(s)"
+                )
+        self.query_one("#user_input", Input).focus()
 
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
