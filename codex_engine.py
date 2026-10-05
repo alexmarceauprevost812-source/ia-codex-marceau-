@@ -35,6 +35,8 @@ class CodexEngine:
         self.model = model
         self.endpoint = endpoint.rstrip("/")
         self.status = status or (lambda _msg: None)
+        self.last_file = None
+        self.last_content = ""
         self.state_dir = self.root / ".tilex"
         self.state_dir.mkdir(parents=True, exist_ok=True)
 
@@ -194,6 +196,8 @@ Ne touche pas aux fichiers hors de la tâche sauf nécessité absolue."""
             old = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
             if old != content:
                 target.write_text(content, encoding="utf-8")
+                self.last_file = rel
+                self.last_content = content
                 changed.append(rel)
         return changed
 
