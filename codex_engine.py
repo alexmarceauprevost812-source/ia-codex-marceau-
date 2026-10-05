@@ -113,16 +113,42 @@ class CodexEngine:
 
     def turbo_task(self, request: str) -> dict | None:
         """Résout localement une commande simple sans appel IA de planification."""
-        # 1) Nom de fichier explicitement mentionné dans la commande.
+        raw = request.strip()
+        lower = raw.lower()
+
+        # 1) README.md: tolère les fautes fréquentes de frappe de l'utilisateur.
+        readme_aliases = (
+            "readme", "readme.md", "readme.dm", "readm.md", "readm.dm",
+            "reamd.md", "reamd.dm", "redame.md", "redame.dm",
+        )
+        if any(alias in lower for alias in readme_aliases):
+            return {
+                "id": "TURBO",
+                "goal": request,
+                "files": ["README.md"],
+                "needs": ["README.md"],
+            }
+
+        # 2) Nom de fichier explicite avec extension connue: priorité absolue.
         match = re.search(
             r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|js|jsx|ts|tsx|html|css|json|md|txt|toml|ya?ml|sql|sh|ps1))",
-            request,
+            raw,
         )
         if match:
             rel = match.group(1).replace("\\", "/")
             return {"id": "TURBO", "goal": request, "files": [rel], "needs": [rel]}
 
-        # 2) Si le projet ne contient qu'un seul fichier de code, on le cible directement.
+        # 3) Si l'utilisateur dit clairement "fichier <nom>" sans extension reconnue,
+        # ne choisis PAS main.py automatiquement. Laisse l'architecte décider.
+        mentions_file = bool(
+            re.search(r"(?i)\b(?:fichier|file)\b", raw)
+            or re.search(r"(?i)\b[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,8}\b", raw)
+        )
+        if mentions_file:
+            return None
+
+        # 4) Fallback seulement quand AUCUN nom de fichier n'a été demandé.
+        # Si le projet ne contient qu'un seul fichier de code, on peut le cibler.
         candidates = []
         for rel in self.inventory(max_files=80):
             p = Path(rel)
@@ -353,11 +379,16 @@ cd ia-codex-marceau-
                 self.status("🧠 Architecture du projet…")
                 plan = self.make_plan(request)
             tasks = plan.get("tasks", [])[:2]
-            if "readme" not in request.lower():
+            request_lower = request.lower()
+            readme_requested = any(alias in request_lower for alias in (
+                "readme", "readme.md", "readme.dm", "readm.md", "readm.dm",
+                "reamd.md", "reamd.dm", "redame.md", "redame.dm",
+            ))
+            if not readme_requested:
                 for task_item in tasks:
                     files = [str(x) for x in task_item.get("files", [])]
                     if any(Path(x).name.lower() == "readme.md" for x in files):
-                        raise ValueError("Le plan IA a ciblé README.md au lieu d'un vrai fichier de code.")
+                        raise ValueError("Le plan IA a ciblé README.md au lieu du fichier demandé.")
             changed = []
             for index, task in enumerate(tasks, 1):
                 task_id = task.get("id", f"T{index:02}")
