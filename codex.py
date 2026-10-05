@@ -523,9 +523,15 @@ def show_codex_workspace(filename=None, codex_message=None):
 
     right = Panel(body, title=title, border_style="bright_cyan")
 
+    top_menu = Text(justify="center")
+    top_menu.append(
+        "LOCAL AI  •  CODING  •  DEVELOPER TERMINAL    "
+        "🤖 IA  ▶ RUN  🌐 PREVIEW  🔨 BUILD  🧪 TESTS  📜 LOGS  📦 DÉPENDANCES  🔀 GIT  💾 SAUVEGARDES  ⚙ SETTINGS",
+        style="bold #39FF14"
+    )
+    console.print(Panel(top_menu, border_style="bright_cyan", padding=(0, 1)))
+
     tool_text = Text()
-    tool_text.append("LOCAL AI • CODING\n", style="bold #39FF14")
-    tool_text.append("DEVELOPER TERMINAL\n\n", style="bold bright_cyan")
     tool_text.append("🤖 IA\n▶ RUN\n🌐 PREVIEW\n🔨 BUILD\n🧪 TESTS\n📜 LOGS\n📦 DÉPENDANCES\n🔀 GIT\n💾 SAUVEGARDES\n⚙ SETTINGS", style="bright_white")
     tools_panel = Panel(tool_text, title="[#39FF14]OUTILS[/]", border_style="dark_orange")
 
