@@ -731,6 +731,8 @@ class CodexLocalApp(App):
         self._typing_text = ""
         self._typing_pos = 0
         self._typing_timer = None
+        self.mode = "codex"
+        self.chat_history = []
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -776,6 +778,26 @@ class CodexLocalApp(App):
     def on_input_submitted(self, event):
         cmd = event.value.strip()
         event.input.value = ""
+        if cmd.lower() == "/chat":
+            self.mode = "chat"
+            self.query_one("#editor_title", Static).update("CHAT IA • /codex POUR REVENIR AU CODE")
+            self.query_one("#editor", TextArea).text = "=== TI-LEX CHAT IA ===\n\nÉcris ton message en bas.\n/codex = retour au CODEX."
+            self.query_one("#user_input", Input).placeholder = "💬 CHAT IA › écris ton message…"
+            return
+        if cmd.lower() == "/codex":
+            self.mode = "codex"
+            self.query_one("#editor_title", Static).update("CODEX • ÉCRITURE / GÉNÉRATION")
+            self.query_one("#user_input", Input).placeholder = "✍ CODEX LOCAL › écris ta commande ici…"
+            if self.current_path and self.current_path.is_file():
+                self.query_one("#editor", TextArea).text = self.current_path.read_text(encoding="utf-8", errors="replace")
+            else:
+                self.query_one("#editor", TextArea).text = ""
+            return
+        if self.mode == "chat" and cmd:
+            self.chat_history.append(("TOI", cmd))
+            self._render_chat()
+            self.run_worker(lambda: self._chat_in_background(cmd), thread=True, exclusive=True)
+            return
         if cmd.lower().startswith("nouveau "):
             rel = cmd[8:].strip()
             target = (self.root / rel).resolve()
@@ -790,6 +812,39 @@ class CodexLocalApp(App):
         elif cmd:
             self.notify("CODEX travaille en arrière-plan…")
             self.run_worker(lambda: self._build_in_background(cmd), thread=True, exclusive=True)
+
+    def _render_chat(self):
+        lines = ["=== TI-LEX CHAT IA ===", ""]
+        for who, message in self.chat_history[-30:]:
+            lines.append(who + " › " + message)
+            lines.append("")
+        self.query_one("#editor", TextArea).text = "\n".join(lines)
+
+    def _chat_in_background(self, message):
+        history = "\n".join(who + ": " + text for who, text in self.chat_history[-12:])
+        prompt = (
+            "Tu es TI-LEX CHAT, assistant de programmation local. "
+            "Réponds clairement en français. Ceci est un chat: ne crée et ne modifie aucun fichier.\n\n"
+            + history + "\nIA:"
+        )
+        try:
+            response = requests.post(
+                "http://127.0.0.1:11434/api/generate",
+                json={"model": config["model"], "prompt": prompt, "stream": False},
+                timeout=600,
+            )
+            response.raise_for_status()
+            answer = response.json().get("response", "").strip()
+        except Exception as exc:
+            answer = "Erreur CHAT IA: " + str(exc)
+        self.call_from_thread(self._finish_chat, answer)
+
+    def _finish_chat(self, answer):
+        if self.mode != "chat":
+            return
+        self.chat_history.append(("IA", answer))
+        self._render_chat()
+        self.query_one("#user_input", Input).focus()
 
     def _build_in_background(self, request):
         engine = CodexEngine(self.root, model=config["model"])
