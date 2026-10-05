@@ -531,16 +531,26 @@ def show_codex_workspace(filename=None, codex_message=None):
     )
     console.print(Panel(top_menu, border_style="bright_cyan", padding=(0, 1)))
 
-    tool_text = Text()
-    tool_text.append("🤖 IA\n▶ RUN\n🌐 PREVIEW\n🔨 BUILD\n🧪 TESTS\n📜 LOGS\n📦 DÉPENDANCES\n🔀 GIT\n💾 SAUVEGARDES\n⚙ SETTINGS", style="bright_white")
-    tools_panel = Panel(tool_text, title="[#39FF14]OUTILS[/]", border_style="dark_orange")
+    workspace_height = max(16, console.height - 17)
+    left.height = workspace_height
+    right.height = workspace_height
 
     grid = Table.grid(expand=True, padding=(0, 1))
     grid.add_column(ratio=1)
-    grid.add_column(ratio=3)
-    grid.add_column(ratio=1)
-    grid.add_row(left, right, tools_panel)
+    grid.add_column(ratio=4)
+    grid.add_row(left, right)
     console.print(grid)
+
+    input_hint = Text(justify="center")
+    input_hint.append("✍ CODEX LOCAL › ", style="bold dark_orange")
+    input_hint.append("écris ta commande ici", style="bright_white")
+    console.print(Panel(
+        input_hint,
+        title="[dark_orange]ÉCRITURE UTILISATEUR[/]",
+        border_style="dark_orange",
+        padding=(0, 1),
+        height=3
+    ))
 
 
 def show_diff_preview(filename, old_text, new_text):
