@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import difflib
 import re
 import shutil
 import time
@@ -37,6 +38,7 @@ class CodexEngine:
         self.status = status or (lambda _msg: None)
         self.last_file = None
         self.last_content = ""
+        self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
         self.state_dir = self.root / ".tilex"
         self.state_dir.mkdir(parents=True, exist_ok=True)
 
@@ -197,9 +199,24 @@ Ne génère aucun autre fichier. Ne renvoie jamais un diff ni des points de susp
             target.parent.mkdir(parents=True, exist_ok=True)
             old = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
             if old != content:
+                old_lines = (old or "").splitlines()
+                new_lines = content.splitlines()
+                stats = {"added": 0, "modified": 0, "deleted": 0}
+                matcher = difflib.SequenceMatcher(a=old_lines, b=new_lines)
+                for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+                    if tag == "insert":
+                        stats["added"] += j2 - j1
+                    elif tag == "delete":
+                        stats["deleted"] += i2 - i1
+                    elif tag == "replace":
+                        paired = min(i2 - i1, j2 - j1)
+                        stats["modified"] += paired
+                        stats["deleted"] += max(0, (i2 - i1) - paired)
+                        stats["added"] += max(0, (j2 - j1) - paired)
                 target.write_text(content, encoding="utf-8")
                 self.last_file = rel
                 self.last_content = content
+                self.last_stats = stats
                 changed.append(rel)
         return changed
 
