@@ -44,6 +44,7 @@ class CodexEngine:
         self.last_stats_by_file = {}
         self.state_dir = self.root / ".tilex"
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.memory_file = self.state_dir / "project_memory.json"
 
     def _safe(self, rel: str) -> Path:
         rel = rel.replace("\\", "/").lstrip("/")
@@ -119,6 +120,67 @@ class CodexEngine:
                 continue
         return "\n\n".join(chunks)
 
+    def _load_project_memory(self) -> list[dict]:
+        try:
+            if not self.memory_file.is_file():
+                return []
+            data = json.loads(self.memory_file.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return [x for x in data[-12:] if isinstance(x, dict)]
+        except Exception:
+            pass
+        return []
+
+    def _remember_run(self, request: str, changed: list[str], plan: dict) -> None:
+        memory = self._load_project_memory()
+        memory.append({
+            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "request": " ".join(request.split())[:500],
+            "changed": list(changed)[:2],
+            "summary": " ".join(str(plan.get("summary") or "").split())[:300],
+        })
+        self.memory_file.write_text(
+            json.dumps(memory[-12:], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _request_terms(request: str) -> set[str]:
+        words = re.findall(r"[A-Za-zÀ-ÿ0-9_+-]{3,}", request.lower())
+        stop = {
+            "avec", "dans", "pour", "plus", "code", "fichier", "faire", "crée",
+            "cree", "ajoute", "modifier", "modifie", "une", "des", "les", "qui",
+            "sur", "the", "and", "file", "create", "update",
+        }
+        return {w for w in words if w not in stop}
+
+    def relevant_files(self, request: str, max_files: int = 10) -> list[str]:
+        """Classe les fichiers du projet selon leur pertinence pour la demande."""
+        terms = self._request_terms(request)
+        recent = []
+        for item in reversed(self._load_project_memory()):
+            recent.extend(str(x) for x in item.get("changed", []))
+
+        scored = []
+        for rel in self.inventory(max_files=240):
+            low = rel.lower()
+            p = Path(rel)
+            score = 0
+            for term in terms:
+                if term in low:
+                    score += 6
+                if term in p.stem.lower():
+                    score += 4
+            if rel in recent:
+                score += max(1, 5 - recent.index(rel))
+            if p.name in {"package.json", "requirements.txt", "pyproject.toml", "README.md"}:
+                score += 1
+            if score > 0:
+                scored.append((score, len(rel), rel))
+
+        scored.sort(key=lambda x: (-x[0], x[1], x[2]))
+        return [rel for _, _, rel in scored[:max_files]]
+
     def turbo_task(self, request: str) -> dict | None:
         """Résout localement une commande simple sans appel IA de planification."""
         raw = request.strip()
@@ -138,13 +200,16 @@ class CodexEngine:
             }
 
         # 2) Nom de fichier explicite avec extension connue: priorité absolue.
-        match = re.search(
+        matches = re.findall(
             r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|pyw|js|jsx|mjs|cjs|ts|tsx|html?|css|scss|json|md|txt|toml|ya?ml|sql|sh|bash|zsh|ps1|bat|cmd|c|h|cpp|hpp|cc|java|go|rs|php|rb|lua|xml|ini|cfg|env))",
             raw,
         )
-        if match:
-            rel = match.group(1).replace("\\", "/")
+        explicit_files = list(dict.fromkeys(x.replace("\\", "/") for x in matches))[:2]
+        if len(explicit_files) == 1:
+            rel = explicit_files[0]
             return {"id": "TURBO", "goal": request, "files": [rel], "needs": [rel]}
+        if len(explicit_files) >= 2:
+            return None
 
         # 3) Si l'utilisateur dit clairement "fichier <nom>" sans extension reconnue,
         # ne choisis PAS main.py automatiquement. Laisse l'architecte décider.
@@ -189,10 +254,16 @@ class CodexEngine:
         return plan
     def make_plan(self, request: str) -> dict:
         files = self.inventory()
+        relevant = self.relevant_files(request, max_files=12)
+        memory = self._load_project_memory()
         prompt = f"""Tu es l'ARCHITECTE de TI-LEX CODEX, un agent de développement local.
 Projet: {self.root.name}
 Demande: {request}
 Fichiers existants: {json.dumps(files, ensure_ascii=False)}
+Fichiers probablement pertinents: {json.dumps(relevant, ensure_ascii=False)}
+Mémoire récente du projet: {json.dumps(memory[-8:], ensure_ascii=False)}
+
+Utilise la mémoire uniquement pour comprendre la continuité du projet. La demande actuelle reste prioritaire.
 
 Conçois un plan professionnel en utilisant LE MINIMUM DE FICHIERS NÉCESSAIRE.
 Règle principale: utilise 1 seul fichier par défaut. Crée un nouveau fichier si c'est réellement le bon endroit pour le code demandé. Utilise 2 fichiers MAXIMUM seulement si la séparation est techniquement nécessaire ou explicitement demandée par l'utilisateur. N'éparpille jamais une petite modification dans plusieurs fichiers. Si tout peut être proprement fait dans 1 fichier, fais-le dans 1 seul fichier.
@@ -275,7 +346,8 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche pa
             raise ValueError("Tâche sans fichier cible")
         target = targets[0]
         needs = [str(x) for x in task.get("needs", [])][:12]
-        context_paths = list(dict.fromkeys(needs + [target]))
+        related = self.relevant_files(request, max_files=4)
+        context_paths = list(dict.fromkeys([target] + needs + related))
         context = self.context_for(context_paths)
         prompt = f"""Tu es l'IMPLEMENTEUR de TI-LEX CODEX.
 Demande globale: {request}
@@ -496,6 +568,7 @@ cd ia-codex-marceau-
             (self.state_dir / "last_run.json").write_text(
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+            self._remember_run(request, report["changed"], plan)
             self.status("✅ Génération terminée")
             return CodexResult(True, f"Projet généré: {len(report['changed'])} fichier(s) modifié(s).",
                                report["changed"], plan)
