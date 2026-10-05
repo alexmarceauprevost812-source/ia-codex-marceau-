@@ -93,31 +93,57 @@ def choose_font():
         console.print("[red]Choix invalide.[/]")
 
 def print_ai_response(text):
-    """Affiche le texte IA et colore automatiquement les blocs de code Markdown."""
+    """Affiche les réponses IA avec une coloration visible du code."""
     import re
-    parts = re.split(r"```([a-zA-Z0-9_+.-]*)\\n([\\s\\S]*?)```", text)
-    for i in range(0, len(parts), 3):
-        prose = parts[i]
-        if prose.strip():
-            console.print(prose.strip(), style="tilex.value", highlight=True)
-        if i + 2 < len(parts):
-            language = (parts[i + 1] or "python").lower()
-            code = parts[i + 2].rstrip()
-            lexer_aliases = {
-                "py": "python", "python3": "python",
-                "ps1": "powershell", "sh": "bash",
-                "shell": "bash", "js": "javascript",
-                "ts": "typescript", "html5": "html",
-            }
-            language = lexer_aliases.get(language, language)
-            console.print(Syntax(
-                code,
-                language,
-                theme="dracula",
-                line_numbers=True,
-                word_wrap=False,
-                background_color="default",
-            ))
+
+    # 1) Blocs Markdown explicites : ```python ... ```
+    pattern = re.compile(r"```([a-zA-Z0-9_+.-]*)\\s*\\n([\\s\\S]*?)```")
+    pos = 0
+    found = False
+    for match in pattern.finditer(text):
+        found = True
+        prose = text[pos:match.start()].strip()
+        if prose:
+            console.print(prose, style="tilex.value", highlight=True)
+
+        language = (match.group(1) or "python").lower()
+        aliases = {
+            "py": "python", "python3": "python", "ps1": "powershell",
+            "sh": "bash", "shell": "bash", "js": "javascript",
+            "ts": "typescript", "html5": "html",
+        }
+        language = aliases.get(language, language)
+        code = match.group(2).rstrip()
+        console.print(Panel(
+            Syntax(code, language, theme="monokai", line_numbers=True,
+                   word_wrap=False, background_color="default"),
+            title=f"[tilex.action]CODE • {language.upper()}[/]",
+            border_style="bright_cyan",
+        ))
+        pos = match.end()
+
+    if found:
+        tail = text[pos:].strip()
+        if tail:
+            console.print(tail, style="tilex.value", highlight=True)
+        return
+
+    # 2) Secours : si le modèle oublie les backticks mais la réponse ressemble
+    # fortement à du Python, on la colore quand même.
+    python_signals = (
+        "def ", "class ", "import ", "from ", "print(", "if __name__",
+        "for ", "while ", "return ", "try:", "except ", "= [", "= {"
+    )
+    score = sum(1 for signal in python_signals if signal in text)
+    if score >= 2:
+        console.print(Panel(
+            Syntax(text.strip(), "python", theme="monokai", line_numbers=True,
+                   word_wrap=False, background_color="default"),
+            title="[tilex.action]CODE • PYTHON[/]",
+            border_style="bright_cyan",
+        ))
+    else:
+        console.print(text.strip(), style="tilex.value", highlight=True)
 
 def ollama(prompt):
     model = config["model"]
