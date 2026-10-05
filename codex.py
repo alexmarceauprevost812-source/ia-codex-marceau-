@@ -740,7 +740,8 @@ class CodexLocalApp(App):
             yield ListView(id="files")
             with Vertical(id="center"):
                 yield Static("CODEX • ÉCRITURE / GÉNÉRATION", id="editor_title")
-                yield TextArea("", id="editor", language="python", show_line_numbers=True)\n                yield RichLog(id="chat_log", markup=True, wrap=True, auto_scroll=True)
+                yield TextArea("", id="editor", language="python", show_line_numbers=True)
+                yield RichLog(id="chat_log", markup=True, wrap=True, auto_scroll=True)
             with Vertical(id="tools"):
                 yield Static("🛠 OUTILS")
                 yield Button("🤖 IA", id="tool_ai")
