@@ -522,10 +522,18 @@ def show_codex_workspace(filename=None, codex_message=None):
         title = "[bright_cyan]TI-LEX CODEX LOCAL[/]"
 
     right = Panel(body, title=title, border_style="bright_cyan")
+
+    tool_text = Text()
+    tool_text.append("LOCAL AI • CODING\n", style="bold #39FF14")
+    tool_text.append("DEVELOPER TERMINAL\n\n", style="bold bright_cyan")
+    tool_text.append("🤖 IA\n▶ RUN\n🌐 PREVIEW\n🔨 BUILD\n🧪 TESTS\n📜 LOGS\n📦 DÉPENDANCES\n🔀 GIT\n💾 SAUVEGARDES\n⚙ SETTINGS", style="bright_white")
+    tools_panel = Panel(tool_text, title="[#39FF14]OUTILS[/]", border_style="dark_orange")
+
     grid = Table.grid(expand=True, padding=(0, 1))
     grid.add_column(ratio=1)
     grid.add_column(ratio=3)
-    grid.add_row(left, right)
+    grid.add_column(ratio=1)
+    grid.add_row(left, right, tools_panel)
     console.print(grid)
 
     codex_body = Text()
