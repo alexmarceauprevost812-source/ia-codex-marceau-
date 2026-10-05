@@ -533,10 +533,18 @@ def show_codex_workspace(filename=None, codex_message=None):
     left.height = workspace_height
     right.height = workspace_height
 
+    tools_panel = Panel(
+        Text("🤖 IA\n▶ RUN\n🌐 PREVIEW\n🔨 BUILD\n🧪 TESTS\n📜 LOGS\n📦 DÉPENDANCES\n🔀 GIT\n💾 SAUVEGARDES\n⚙ SETTINGS", style="bright_white"),
+        title="[#39FF14]OUTILS[/]",
+        border_style="dark_orange",
+        height=workspace_height
+    )
+
     grid = Table.grid(expand=True, padding=(0, 1))
     grid.add_column(ratio=1)
     grid.add_column(ratio=4)
-    grid.add_row(left, right)
+    grid.add_column(ratio=1)
+    grid.add_row(left, right, tools_panel)
     console.print(grid)
 
     input_hint = Text(justify="center")
