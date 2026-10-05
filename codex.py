@@ -52,18 +52,20 @@ active_project = None
 BANNER = """TI-LEX CODEX
 LOCAL AI • CODING • GAMER DARK"""
 
-HELP = """[bold bright_green]-chat[/]              Chat libre avec l'IA
-[bold bright_green]-projet NOM[/]        Créer un nouveau projet local
-[bold bright_cyan]-projets[/]           Voir les projets locaux
-[bold medium_purple1]-selection NOM[/]   Sélectionner un projet pour continuer
-[bold cyan]-ouvrir fichier.py[/]  Afficher un fichier avec coloration
-[bold magenta]-explique fichier[/] Expliquer le code avec l'IA
-[bold yellow]-corrige fichier[/]  Proposer une correction
-[bold red]-run fichier.py[/]      Exécuter après confirmation
-[bold bright_cyan]-police[/]            Choisir parmi 20 polices
-[bold white]-aide[/]              Ouvrir cette page/chat d'aide
-[bold white]-retour[/]            Quitter le mode aide/chat
-[bold white]-quitter[/]           Fermer TI-LEX CODEX"""
+HELP = """[tilex.command]/chat[/]              Discuter librement avec l'IA
+[tilex.command]/retour[/]            Revenir au projet depuis le chat
+[tilex.command]/nouveau[/]           Créer et ouvrir un nouveau projet
+[tilex.command]/projets[/]           Choisir un autre projet
+[tilex.command]/ouvrir FICHIER[/]    Afficher le code en couleurs
+[tilex.command]/explique FICHIER[/]  Expliquer un fichier
+[tilex.command]/corrige FICHIER[/]   Analyser et proposer une correction
+[tilex.command]/run FICHIER[/]       Exécuter un fichier Python après confirmation
+[tilex.command]/police[/]            Choisir une police
+[tilex.command]/aide[/]              Afficher cette aide
+[tilex.command]/quitter[/]           Fermer TI-LEX CODEX
+
+[tilex.info]Dans un projet, écris directement ce que tu veux coder :[/]
+[tilex.value]ex. « crée une calculatrice Python » ou « explique mon main.py »[/]"""
 
 def fluid(text, delay=None):
     delay = config.get("stream_delay", 0.008) if delay is None else delay
@@ -110,8 +112,14 @@ def ollama(prompt):
         console.print(f"[red]Ollama indisponible : {exc}[/]")
         console.print(f"[yellow]Vérifie Ollama puis : ollama pull {model}[/]")
 
-def show_file(name):
+def project_path(name):
     p = Path(name).expanduser()
+    if not p.is_absolute() and active_project:
+        p = active_project / p
+    return p
+
+def show_file(name):
+    p = project_path(name)
     if not p.is_file():
         console.print("[tilex.error]Fichier introuvable.[/]")
         return
@@ -119,7 +127,7 @@ def show_file(name):
     console.print(Syntax(p.read_text(errors="replace"), lexer, theme="dracula", line_numbers=True, word_wrap=True))
 
 def ai_file(name, action):
-    p = Path(name).expanduser()
+    p = project_path(name)
     if not p.is_file():
         console.print("[red]Fichier introuvable.[/]")
         return
@@ -127,7 +135,7 @@ def ai_file(name, action):
     ollama(f"Tu es TI-LEX CODEX. {action} ce code clairement, en français. Ne modifie aucun fichier sans confirmation.\n\n{code}")
 
 def run_file(name):
-    p = Path(name).expanduser()
+    p = project_path(name)
     if not p.is_file():
         console.print("[red]Fichier introuvable.[/]")
         return
@@ -188,7 +196,68 @@ def create_project(name):
     (root / "requirements.txt").write_text("", encoding="utf-8")
     console.print(f"[tilex.success]✓ Nouveau projet local créé : {root}[/]")
     console.print("[cyan]Fichiers : main.py, README.md, requirements.txt, src/[/]")
+    active_project = root
+    console.print(f"[tilex.info]PROJET ACTIF : {root.name}[/]")
     console.print("[dim]Aucun fichier n'a été envoyé sur Internet ou GitHub.[/]")
+
+def startup_menu():
+    global active_project
+    while active_project is None:
+        console.print(Panel(
+            "[tilex.action]1[/]  [tilex.value]NOUVEAU PROJET[/]\n"
+            "[tilex.action]2[/]  [tilex.value]CONTINUER UN PROJET[/]",
+            title="TI-LEX CODEX • DÉMARRAGE",
+            border_style="medium_purple1"
+        ))
+        choice = session.prompt("CHOIX › ").strip()
+        if choice == "1":
+            name = session.prompt("Nom du projet › ").strip()
+            create_project(name)
+        elif choice == "2":
+            root = projects_root()
+            root.mkdir(parents=True, exist_ok=True)
+            projects = sorted([p for p in root.iterdir() if p.is_dir()])
+            if not projects:
+                console.print("[tilex.warning]Aucun projet. Crée ton premier projet.[/]")
+                continue
+            table = Table(title="CHOISIR UN PROJET", border_style="medium_purple1")
+            table.add_column("#", style="bright_yellow")
+            table.add_column("Projet", style="bright_cyan")
+            for i, p in enumerate(projects, 1):
+                table.add_row(str(i), p.name)
+            console.print(table)
+            try:
+                n = int(session.prompt("Projet › ").strip())
+                if 1 <= n <= len(projects):
+                    active_project = projects[n - 1]
+                    console.print(f"[tilex.success]✓ Projet chargé : {active_project.name}[/]")
+                else:
+                    console.print("[tilex.error]Choix invalide.[/]")
+            except ValueError:
+                console.print("[tilex.error]Entre le numéro du projet.[/]")
+        else:
+            console.print("[tilex.warning]Choisis 1 ou 2.[/]")
+
+def project_context():
+    if not active_project:
+        return ""
+    files = []
+    for p in active_project.rglob("*"):
+        if p.is_file() and ".git" not in p.parts:
+            try:
+                files.append(str(p.relative_to(active_project)))
+            except ValueError:
+                pass
+        if len(files) >= 60:
+            break
+    return (
+        f"Tu es TI-LEX CODEX, un assistant de programmation local. "
+        f"Le projet actif est {active_project.name}. "
+        f"Chemin: {active_project}. "
+        f"Fichiers: {', '.join(files) if files else '(vide)'}. "
+        "Réponds en français, de façon pratique et orientée code. "
+        "Ne prétends jamais avoir modifié un fichier si aucune opération locale ne l'a réellement modifié. "
+    )
 
 def chat_loop(help_mode=False):
     if help_mode:
@@ -197,46 +266,59 @@ def chat_loop(help_mode=False):
         fluid("Pose-moi une question sur Python, ton projet ou les commandes. Écris -retour pour revenir.")
     while True:
         q = session.prompt("TOI › ").strip()
-        if q == "-retour":
+        if q in ("/retour", "-retour"):
             return
         if q:
             ollama(("Tu aides l'utilisateur à comprendre TI-LEX CODEX et la programmation. " if help_mode else "Tu es TI-LEX CODEX, assistant de programmation. ") + q)
 
 def main():
     console.clear()
-    console.print(Panel(Text(BANNER, style="bold bright_green", justify="center"), border_style="bright_green"))
+    console.print(Panel(Text(BANNER, style="bold bright_green", justify="center"), border_style="medium_purple1"))
     if not (Path.home() / ".ti_lex_codex" / "config.json").exists():
         choose_font()
-    fluid(f"Bienvenue dans TI-LEX CODEX. Police configurée : {config['font']}. Écris -aide pour commencer.")
+
+    startup_menu()
+    console.print(f"[tilex.success]✓ MODE CODEX • PROJET : {active_project.name}[/]")
+    console.print("[tilex.info]Écris directement ce que tu veux coder. /aide pour les commandes, /chat pour discuter.[/]")
+
     while True:
-        prompt_name = active_project.name if active_project else "aucun-projet"
-        cmd = session.prompt(f"TI-LEX CODEX [{prompt_name}] › ").strip()
+        cmd = session.prompt(f"TI-LEX CODEX [{active_project.name}] › ").strip()
         if not cmd:
             continue
-        if cmd == "-quitter":
+
+        if cmd in ("/quitter", "-quitter"):
             break
-        elif cmd == "-aide":
-            chat_loop(True)
-        elif cmd == "-chat":
+        elif cmd in ("/aide", "-aide"):
+            console.print(Panel(HELP, title="TI-LEX CODEX • AIDE", border_style="medium_purple1"))
+        elif cmd in ("/chat", "-chat"):
+            console.print("[tilex.info]MODE CHAT • /retour pour revenir au projet[/]")
             chat_loop(False)
+            console.print(f"[tilex.success]Retour au projet : {active_project.name}[/]")
+        elif cmd in ("/nouveau",):
+            name = session.prompt("Nom du projet › ").strip()
+            create_project(name)
+        elif cmd in ("/projets", "-projets"):
+            old = active_project
+            active_project = None
+            startup_menu()
+            if active_project is None:
+                active_project = old
+        elif cmd in ("/police", "-police"):
+            choose_font()
+        elif cmd.startswith("/ouvrir ") or cmd.startswith("-ouvrir "):
+            show_file(cmd.split(" ", 1)[1].strip())
+        elif cmd.startswith("/explique ") or cmd.startswith("-explique "):
+            ai_file(cmd.split(" ", 1)[1].strip(), "Explique")
+        elif cmd.startswith("/corrige ") or cmd.startswith("-corrige "):
+            ai_file(cmd.split(" ", 1)[1].strip(), "Analyse les erreurs et propose une version corrigée de")
+        elif cmd.startswith("/run ") or cmd.startswith("-run "):
+            run_file(cmd.split(" ", 1)[1].strip())
         elif cmd.startswith("-projet "):
             create_project(cmd[8:].strip())
-        elif cmd == "-projets":
-            list_projects()
         elif cmd.startswith("-selection "):
             select_project(cmd[11:].strip())
-        elif cmd == "-police":
-            choose_font()
-        elif cmd.startswith("-ouvrir "):
-            show_file(cmd[8:].strip())
-        elif cmd.startswith("-explique "):
-            ai_file(cmd[10:].strip(), "Explique")
-        elif cmd.startswith("-corrige "):
-            ai_file(cmd[9:].strip(), "Analyse les erreurs et propose une version corrigée de")
-        elif cmd.startswith("-run "):
-            run_file(cmd[5:].strip())
         else:
-            console.print("[tilex.warning]Commande inconnue. Essaie -aide.[/]")
+            ollama(project_context() + "\nDemande de l'utilisateur dans le projet actif : " + cmd)
 
 if __name__ == "__main__":
     main()
