@@ -10,11 +10,41 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
+from rich.theme import Theme
+from rich.highlighter import RegexHighlighter
 from prompt_toolkit import PromptSession
 
 from config import FONTS, load_config, save_config
 
-console = Console()
+TI_LEX_THEME = Theme({
+    "tilex.command": "bold bright_cyan",
+    "tilex.action": "bold deep_sky_blue1",
+    "tilex.error": "bold bright_red",
+    "tilex.danger": "bold red3",
+    "tilex.warning": "bold dark_orange",
+    "tilex.function": "bold hot_pink",
+    "tilex.keyword": "bold medium_purple1",
+    "tilex.module": "purple",
+    "tilex.number": "bold bright_yellow",
+    "tilex.info": "bold bright_green",
+    "tilex.path": "cyan",
+    "tilex.string": "green_yellow",
+    "tilex.comment": "grey62 italic",
+    "tilex.success": "bold spring_green2",
+    "tilex.label": "bold dodger_blue2",
+    "tilex.value": "bright_white",
+})
+
+class TILexInfoHighlighter(RegexHighlighter):
+    base_style = "tilex."
+    highlights = [
+        r"(?P<info>\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b)",
+        r"(?P<info>\\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b)",
+        r"(?P<info>\\b(?:ID|UUID|PID)\\s*[:=#]?\\s*[A-Za-z0-9_-]+\\b)",
+    ]
+
+info_highlighter = TILexInfoHighlighter()
+console = Console(theme=TI_LEX_THEME, highlighter=info_highlighter)
 config = load_config()
 session = PromptSession()
 
@@ -41,7 +71,7 @@ def fluid(text, delay=None):
 
 def choose_font():
     global config
-    table = Table(title="TI-LEX CODEX • 20 POLICES", border_style="bright_green")
+    table = Table(title="TI-LEX CODEX • 20 POLICES", border_style="medium_purple1")
     table.add_column("#", style="bright_cyan", justify="right")
     table.add_column("Police", style="white")
     for i, font in enumerate(FONTS, 1):
@@ -80,10 +110,10 @@ def ollama(prompt):
 def show_file(name):
     p = Path(name).expanduser()
     if not p.is_file():
-        console.print("[red]Fichier introuvable.[/]")
+        console.print("[tilex.error]Fichier introuvable.[/]")
         return
     lexer = "python" if p.suffix == ".py" else "text"
-    console.print(Syntax(p.read_text(errors="replace"), lexer, theme="monokai", line_numbers=True, word_wrap=True))
+    console.print(Syntax(p.read_text(errors="replace"), lexer, theme="dracula", line_numbers=True, word_wrap=True))
 
 def ai_file(name, action):
     p = Path(name).expanduser()
@@ -124,7 +154,7 @@ def create_project(name):
     (root / "main.py").write_text('print("Bonjour TI-LEX")\n', encoding="utf-8")
     (root / "README.md").write_text(f"# {safe_name}\n\nProjet local créé avec TI-LEX CODEX.\n", encoding="utf-8")
     (root / "requirements.txt").write_text("", encoding="utf-8")
-    console.print(f"[bright_green]✓ Nouveau projet local créé : {root}[/]")
+    console.print(f"[tilex.success]✓ Nouveau projet local créé : {root}[/]")
     console.print("[cyan]Fichiers : main.py, README.md, requirements.txt, src/[/]")
     console.print("[dim]Aucun fichier n'a été envoyé sur Internet ou GitHub.[/]")
 
@@ -169,7 +199,7 @@ def main():
         elif cmd.startswith("-run "):
             run_file(cmd[5:].strip())
         else:
-            console.print("[yellow]Commande inconnue. Essaie -aide.[/]")
+            console.print("[tilex.warning]Commande inconnue. Essaie -aide.[/]")
 
 if __name__ == "__main__":
     main()
