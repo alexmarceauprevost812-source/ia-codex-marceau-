@@ -671,73 +671,63 @@ def codex_local_lab():
         console.print("[tilex.warning]Sélectionne d'abord un projet avec 01 ou crée-en un avec 02.[/]")
         return
 
-    show_codex_workspace()
-
+    current_file = None
     while True:
-        console.print(Panel(
-            "[dark_orange][01][/] [bright_white]EXPLORATEUR / ARBORESCENCE[/]\n"
-            "[dark_orange][02][/] [bright_white]OUVRIR UN FICHIER[/]\n"
-            "[dark_orange][03][/] [bright_white]README.md[/]\n"
-            "[dark_orange][04][/] [bright_white]ASSISTANT IA DU PROJET[/]\n"
-            "[dark_orange][05][/] [bright_white]RUN • PYTHON[/]\n"
-            "[dark_orange][06][/] [bright_white]PREVIEW LOCAL[/]\n"
-            "[dark_orange][07][/] [bright_white]BUILD LOCAL[/]\n"
-            "[dark_orange][08][/] [bright_white]LOGS[/]\n"
-            "[dark_orange][09][/] [bright_white]TESTS[/]\n"
-            "[dark_orange][10][/] [bright_white]DÉPENDANCES[/]\n"
-            "[dark_orange][11][/] [bright_white]RECHERCHE DANS LE CODE[/]\n"
-            "[dark_orange][12][/] [bright_white]GIT LOCAL[/]\n"
-            "[dark_orange][13][/] [bright_white]SNAPSHOTS / SAUVEGARDES[/]\n"
-            "[dark_orange][14][/] [bright_white]ÉTAT DU PROJET[/]\n"
-            "[dark_orange][15][/] [bright_white]SETTINGS[/]\n"
-            "[dark_orange][16][/] [bright_white]IMAGES / ASSETS[/]\n"
-            "[dark_orange][00][/] [#39FF14]RETOUR AU MENU PRINCIPAL[/]\n\n"
-            f"[#39FF14]PROJET › {active_project.name}[/]\n"
-            f"[bright_cyan]LOCAL › {active_project}[/]",
-            title="[#39FF14]CODEX LOCAL • LABORATOIRE[/]",
-            border_style="#39FF14"
-        ))
-        choice = session.prompt("LAB › ").strip()
+        console.clear()
+        show_logo()
+        show_codex_workspace(current_file)
+        console.print(
+            "[#39FF14]📄 OUVRIR[/]  [bright_cyan]🤖 IA[/]  [bright_white]▶️ RUN[/]  "
+            "[bright_white]🔎 RECHERCHE[/]  [bright_white]🖼️ IMAGES[/]  "
+            "[bright_white]📊 ÉTAT[/]  [dark_orange]⚙️ MENU[/]  [#FF1744]↩ RETOUR[/]"
+        )
+        console.print(
+            "[dim]Commandes : ouvrir | ia | run | recherche | images | etat | menu | retour[/]"
+        )
+        cmd = session.prompt("CODEX LOCAL › ").strip()
 
-        if choice == "00":
+        if cmd in ("retour", "/retour", "00"):
             return
-        if choice == "01":
-            show_project_tree()
-        elif choice == "02":
-            show_codex_workspace()
-            name = session.prompt("Fichier à ouvrir › ").strip()
+        elif cmd in ("ouvrir", "fichier", "files"):
+            show_project_files()
+            name = session.prompt("Fichier › ").strip()
             if name:
-                show_codex_workspace(name)
-        elif choice == "03":
-            show_readme()
-        elif choice == "04":
-            console.print("[tilex.info]IA DU PROJET • /retour pour revenir au laboratoire[/]")
-            while True:
-                q = session.prompt("PROJET + IA › ").strip()
-                if q in ("/retour", "-retour"):
-                    break
-                if q:
-                    ollama(project_context() + "\nDemande : " + q)
-        elif choice == "05":
-            name = session.prompt("Fichier Python à exécuter › ").strip()
+                p = project_path(name)
+                if p.is_file():
+                    current_file = name
+                else:
+                    console.print("[tilex.error]Fichier introuvable.[/]")
+                    session.prompt("Entrée pour continuer › ")
+        elif cmd in ("ia", "codex"):
+            q = session.prompt("🤖 CODEX › ").strip()
+            if q:
+                ollama(project_context() + "\nFichier actif: " + (current_file or "(aucun)") + "\nDemande: " + q)
+                session.prompt("Entrée pour continuer › ")
+        elif cmd == "run":
+            name = current_file or session.prompt("Fichier Python › ").strip()
             if name:
                 run_file(name)
-        elif choice in ("06", "07", "08", "09", "10", "12", "13", "15"):
-            labels = {
-                "06": "PREVIEW LOCAL", "07": "BUILD LOCAL", "08": "LOGS",
-                "09": "TESTS", "10": "DÉPENDANCES", "12": "GIT LOCAL",
-                "13": "SNAPSHOTS / SAUVEGARDES", "15": "SETTINGS"
-            }
-            console.print(f"[tilex.warning]{labels[choice]} : module prévu pour la prochaine étape de CODEX LOCAL.[/]")
-        elif choice == "11":
+                session.prompt("Entrée pour continuer › ")
+        elif cmd in ("recherche", "chercher"):
             term = session.prompt("Texte à rechercher › ").strip()
             search_project(term)
-        elif choice == "14":
-            show_project_status()
-        elif choice == "16":
+            session.prompt("Entrée pour continuer › ")
+        elif cmd in ("images", "image"):
             images_lab()
-        else:
-            console.print("[tilex.warning]Choix invalide.[/]")
+        elif cmd in ("etat", "status"):
+            show_project_status()
+            session.prompt("Entrée pour continuer › ")
+        elif cmd == "menu":
+            console.print(
+                "[bright_white]🌐 Preview   🔨 Build   🧪 Tests   📜 Logs   "
+                "📦 Dépendances   🔀 Git   💾 Sauvegardes   ⚙️ Settings[/]"
+            )
+            console.print("[tilex.warning]Ces modules avancés seront branchés progressivement.[/]")
+            session.prompt("Entrée pour continuer › ")
+        elif cmd:
+            # Le prompt principal de CODEX LOCAL sert aussi directement à parler à l'IA.
+            ollama(project_context() + "\nFichier actif: " + (current_file or "(aucun)") + "\nDemande: " + cmd)
+            session.prompt("Entrée pour continuer › ")
 
 
 def show_dev_menu():
