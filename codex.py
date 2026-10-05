@@ -830,8 +830,7 @@ class CodexLocalApp(App):
                 line.append(message, style="#FFFFFF")
             else:
                 line.append("IA › ", style="bold #00E5FF")
-                for n, word in enumerate(message.split()):
-                    line.append(word + " ", style=colors[n % len(colors)])
+                line.append(message, style="#87CEFA")
             log.write(line)
 
     def _chat_in_background(self, message):
