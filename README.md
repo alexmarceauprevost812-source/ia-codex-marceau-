@@ -25,6 +25,57 @@ source .venv/bin/activate
 python codex.py
 ```
 
+## Installation Windows 10 / 11
+
+### 1. Installer Ollama
+
+Ouvre **PowerShell** et lance :
+
+```powershell
+winget install Ollama.Ollama
+```
+
+Ferme puis rouvre PowerShell et vérifie :
+
+```powershell
+ollama --version
+```
+
+### 2. Télécharger l'IA gratuite Qwen Coder
+
+```powershell
+ollama pull qwen2.5-coder:7b
+```
+
+Vérifie que le modèle est présent :
+
+```powershell
+ollama list
+```
+
+Tu peux tester directement le modèle avec :
+
+```powershell
+ollama run qwen2.5-coder:7b
+```
+
+### 3. Installer TI-LEX CODEX
+
+Dans PowerShell, place-toi dans le dossier du projet puis lance :
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\install_windows.ps1
+```
+
+### 4. Lancer TI-LEX CODEX
+
+```powershell
+.\start_codex.bat
+```
+
+TI-LEX CODEX utilise Ollama localement sur `127.0.0.1:11434`. Aucune clé API payante n'est nécessaire pour le modèle local.
+
 ## IA locale gratuite
 
 Installe Ollama depuis sa documentation officielle, puis :
