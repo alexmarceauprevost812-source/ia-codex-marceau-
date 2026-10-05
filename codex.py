@@ -13,6 +13,7 @@ from rich.style import Style
 from pygments.style import Style as PygmentsStyle
 from pygments.token import Text as PygmentsText, Whitespace, Comment, Keyword, Name, Number, Operator, String, Punctuation, Generic, Error
 from rich.table import Table
+from rich.columns import Columns
 from rich.text import Text
 from rich.theme import Theme
 from rich.highlighter import RegexHighlighter
@@ -449,6 +450,106 @@ def show_project_tree():
     if len(paths) > 200:
         console.print(f"[tilex.warning]… {len(paths) - 200} éléments supplémentaires non affichés.[/]")
 
+def file_icon(path):
+    if path.is_dir():
+        return "📁"
+    name = path.name.lower()
+    if name.startswith("readme"):
+        return "📖"
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}:
+        return "🖼️"
+    return "📄"
+
+def explorer_text(selected=None, limit=34):
+    if not active_project:
+        return Text("Aucun projet actif", style="tilex.warning")
+    out = Text()
+    out.append(f"📁 {active_project.name}\n", style="bold #39FF14")
+    paths = sorted(
+        p for p in active_project.rglob("*")
+        if ".git" not in p.parts and ".venv" not in p.parts
+    )
+    for p in paths[:limit]:
+        rel = p.relative_to(active_project)
+        depth = len(rel.parts) - 1
+        is_selected = selected is not None and p.resolve() == selected.resolve()
+        prefix = "▶ " if is_selected else "  "
+        out.append("   " * depth + prefix + file_icon(p) + " ")
+        out.append(str(rel.parts[-1]) + "\n",
+                   style="bold #39FF14" if is_selected else "bright_white")
+    if len(paths) > limit:
+        out.append(f"… +{len(paths) - limit} fichiers/dossiers\n", style="tilex.comment")
+    return out
+
+def show_codex_workspace(filename=None):
+    if not active_project:
+        console.print("[tilex.warning]Aucun projet actif.[/]")
+        return
+
+    selected = project_path(filename) if filename else None
+    left = Panel(
+        explorer_text(selected),
+        title="[#39FF14]📁 FICHIERS[/]",
+        border_style="#39FF14",
+        width=max(24, console.width // 4),
+    )
+
+    if selected and selected.is_file():
+        suffix = selected.suffix.lower()
+        lexer_map = {
+            ".py": "python", ".js": "javascript", ".ts": "typescript",
+            ".html": "html", ".css": "css", ".json": "json",
+            ".md": "markdown", ".sh": "bash", ".ps1": "powershell",
+        }
+        lexer = lexer_map.get(suffix, "text")
+        try:
+            body = Syntax(
+                selected.read_text(encoding="utf-8", errors="replace"),
+                lexer, theme=CODE_STYLE, line_numbers=True,
+                word_wrap=False, background_color="default"
+            )
+        except Exception as exc:
+            body = Text(f"Impossible d'ouvrir ce fichier : {exc}", style="tilex.error")
+        title = f"[bright_cyan]{file_icon(selected)} {selected.name}[/]"
+    else:
+        body = Text(
+            "Sélectionne un fichier pour l'afficher ici.\n\n"
+            "🤖 IA   ▶️ Run   🌐 Preview   🔨 Build   🧪 Tests\n"
+            "📜 Logs   📦 Dépendances   🔀 Git   💾 Sauvegardes   ⚙️ Settings",
+            style="bright_white"
+        )
+        title = "[bright_cyan]TI-LEX CODEX LOCAL[/]"
+
+    right = Panel(body, title=title, border_style="bright_cyan")
+    grid = Table.grid(expand=True, padding=(0, 1))
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=3)
+    grid.add_row(left, right)
+    console.print(grid)
+
+def show_diff_preview(filename, old_text, new_text):
+    import difflib
+    p = project_path(filename)
+    diff = difflib.ndiff(old_text.splitlines(), new_text.splitlines())
+    body = Text()
+    for line in diff:
+        if line.startswith("+ "):
+            body.append("+ " + line[2:] + "\n", style="bold #39FF14")
+        elif line.startswith("- "):
+            body.append("- " + line[2:] + "\n", style="bold #FF1744")
+        elif line.startswith("? "):
+            continue
+        else:
+            body.append("  " + line[2:] + "\n", style="bright_white")
+    left = Panel(explorer_text(p), title="[#39FF14]📁 FICHIERS[/]", border_style="#39FF14")
+    right = Panel(body, title=f"[bright_cyan]📄 {p.name} • MODIFICATIONS[/]", border_style="bright_cyan")
+    grid = Table.grid(expand=True, padding=(0, 1))
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=3)
+    grid.add_row(left, right)
+    console.print(grid)
+
+
 def show_readme():
     if not active_project:
         console.print("[tilex.warning]Aucun projet actif.[/]")
@@ -570,6 +671,8 @@ def codex_local_lab():
         console.print("[tilex.warning]Sélectionne d'abord un projet avec 01 ou crée-en un avec 02.[/]")
         return
 
+    show_codex_workspace()
+
     while True:
         console.print(Panel(
             "[dark_orange][01][/] [bright_white]EXPLORATEUR / ARBORESCENCE[/]\n"
@@ -601,10 +704,10 @@ def codex_local_lab():
         if choice == "01":
             show_project_tree()
         elif choice == "02":
-            show_project_files()
+            show_codex_workspace()
             name = session.prompt("Fichier à ouvrir › ").strip()
             if name:
-                show_file(name)
+                show_codex_workspace(name)
         elif choice == "03":
             show_readme()
         elif choice == "04":
