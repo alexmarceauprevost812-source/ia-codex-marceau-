@@ -710,6 +710,8 @@ class CodexLocalApp(App):
     #workspace { height: 1fr; }
     #files { width: 25%; border: solid #39ff14; }
     #center { width: 1fr; border: solid #00e5ff; }
+    #tools { width: 18%; border: solid #ff7a00; padding: 0 1; }
+    #tools Button { width: 100%; height: 3; margin: 0; }
     #editor_title { height: 3; content-align: center middle; color: #39ff14; text-style: bold; }
     #editor { height: 1fr; }
     #user_input { dock: bottom; height: 3; border: solid #ff7a00; }
@@ -728,6 +730,14 @@ class CodexLocalApp(App):
             with Vertical(id="center"):
                 yield Static("CODEX • ÉCRITURE / GÉNÉRATION", id="editor_title")
                 yield TextArea("", id="editor", language="python", show_line_numbers=True)
+            with Vertical(id="tools"):
+                yield Static("🛠 OUTILS")
+                yield Button("🤖 IA", id="tool_ai")
+                yield Button("▶ RUN", id="tool_run")
+                yield Button("🌐 PREVIEW", id="tool_preview")
+                yield Button("🔨 BUILD", id="tool_build")
+                yield Button("🧪 TESTS", id="tool_tests")
+                yield Button("💾 SAUVEGARDER", id="tool_save")
         yield Input(placeholder="✍ CODEX LOCAL › écris ta commande ici…", id="user_input")
         yield Footer()
 
@@ -753,6 +763,34 @@ class CodexLocalApp(App):
             text = self.query_one("#editor", TextArea).text
             self.current_path.write_text(text, encoding="utf-8")
             self.notify("Sauvegardé : " + self.current_path.name)
+
+    def on_input_submitted(self, event):
+        cmd = event.value.strip()
+        event.input.value = ""
+        if cmd.lower().startswith("nouveau "):
+            rel = cmd[8:].strip()
+            target = (self.root / rel).resolve()
+            if target == self.root or self.root not in target.parents:
+                self.notify("Chemin refusé.", severity="error")
+                return
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.touch(exist_ok=True)
+            self.notify("Fichier créé : " + str(target.relative_to(self.root)))
+        elif cmd.lower() in {"save", "sauve", "sauvegarde"}:
+            self.action_save_file()
+        elif cmd:
+            self.notify("Commande reçue : " + cmd)
+
+    def on_button_pressed(self, event):
+        if event.button.id == "tool_save":
+            self.action_save_file()
+        elif event.button.id == "tool_run":
+            self.action_save_file()
+            if self.current_path and self.current_path.suffix == ".py":
+                subprocess.Popen([sys.executable, str(self.current_path)], cwd=str(self.root))
+                self.notify("Exécution : " + self.current_path.name)
+        else:
+            self.notify(str(event.button.label) + " sélectionné")
 
     def on_unmount(self):
         self.action_save_file()
