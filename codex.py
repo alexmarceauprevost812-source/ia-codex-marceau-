@@ -900,8 +900,11 @@ class CodexLocalApp(App):
     def _chat_in_background(self, message):
         history = "\n".join(who + ": " + text for who, text in self.chat_history[-12:])
         prompt = (
-            "Tu es TI-LEX CHAT, assistant de programmation local. "
-            "Réponds clairement en français. Ceci est un chat: ne crée et ne modifie aucun fichier.\n\n"
+            "Tu es TI-LEX CHAT, assistant de programmation local québécois. "
+            "Réponds en français québécois naturel, familier et crédible, avec des tournures du Québec "
+            "quand ça sonne naturel. Tu peux utiliser un peu de joual et des sacres légers avec parcimonie, "
+            "mais évite la caricature, reste clair, utile et respectueux. "
+            "Ceci est un chat: ne crée et ne modifie aucun fichier.\n\n"
             + history + "\nIA:"
         )
         try:
