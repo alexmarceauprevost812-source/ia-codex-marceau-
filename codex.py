@@ -31,16 +31,26 @@ TI_LEX_TEXTAREA_THEME = TextAreaTheme(
     syntax_styles={
         "comment": Style(color="#7D8590", italic=True),
         "keyword": Style(color="#D65CFF", bold=True),
+        "keyword.function": Style(color="#D65CFF", bold=True),
+        "keyword.operator": Style(color="#FF1493", bold=True),
         "string": Style(color="#39FF14"),
+        "string.escape": Style(color="#00FF66", bold=True),
         "number": Style(color="#FFFF00"),
+        "boolean": Style(color="#FFFF00", bold=True),
         "operator": Style(color="#FF1493"),
         "function": Style(color="#00BFFF", bold=True),
-        "function.call": Style(color="#00BFFF"),
+        "function.call": Style(color="#00E5FF"),
+        "function.method": Style(color="#00BFFF"),
+        "constructor": Style(color="#B026FF", bold=True),
         "type": Style(color="#00E5FF"),
         "class": Style(color="#B026FF", bold=True),
         "constant": Style(color="#00E5FF"),
         "variable": Style(color="#FFFFFF"),
+        "variable.builtin": Style(color="#00E5FF"),
         "attribute": Style(color="#FF7A00"),
+        "property": Style(color="#FF7A00"),
+        "tag": Style(color="#D65CFF"),
+        "label": Style(color="#00BFFF"),
         "punctuation": Style(color="#F0F6FC"),
     },
 )
@@ -775,6 +785,29 @@ class CodexLocalApp(App):
         yield Input(placeholder="✍ CODEX LOCAL › écris ta commande ici…", id="user_input")
         yield Footer()
 
+    def _set_editor_language(self, path):
+        editor = self.query_one("#editor", TextArea)
+        ext = Path(path).suffix.lower()
+        languages = {
+            ".py": "python",
+            ".js": "javascript",
+            ".jsx": "javascript",
+            ".ts": "typescript",
+            ".tsx": "tsx",
+            ".html": "html",
+            ".htm": "html",
+            ".css": "css",
+            ".json": "json",
+            ".md": "markdown",
+            ".yaml": "yaml",
+            ".yml": "yaml",
+            ".toml": "toml",
+            ".sql": "sql",
+            ".sh": "bash",
+        }
+        language = languages.get(ext)
+        editor.language = language if language in editor.available_languages else None
+
     def on_mount(self):
         editor = self.query_one("#editor", TextArea)
         editor.register_theme(TI_LEX_TEXTAREA_THEME)
@@ -791,6 +824,7 @@ class CodexLocalApp(App):
         p = getattr(event.item, "path", None)
         if p and p.is_file():
             self.current_path = p
+            self._set_editor_language(p)
             self.query_one("#editor", TextArea).text = p.read_text(encoding="utf-8", errors="replace")
             self.query_one("#editor_title", Static).update("CODEX • ÉCRITURE / GÉNÉRATION  •  📄 " + p.name)
             self.query_one("#editor", TextArea).focus()
@@ -915,6 +949,7 @@ class CodexLocalApp(App):
             target = (self.root / result.changed[-1]).resolve()
             if target.is_file():
                 self.current_path = target
+                self._set_editor_language(target)
                 code = generated_code or target.read_text(encoding="utf-8", errors="replace")
                 self.query_one("#editor_title", Static).update(
                     "CODEX • ÉCRITURE NÉON 1.3× • 📄 "
