@@ -108,6 +108,7 @@ def show_logo():
 HELP = """[tilex.action]PROJETS[/]
 [tilex.command]/nouveau[/]             Créer un projet
 [tilex.command]/projets[/]             Choisir/continuer un projet
+[tilex.command]/supprimer[/]           Supprimer un projet (double confirmation)
 [tilex.command]/etat[/]                Tableau de bord du projet actif
 [tilex.command]/fichiers[/]            Lister les fichiers du projet
 
@@ -600,6 +601,10 @@ def main():
             startup_menu()
             if active_project is None:
                 active_project = old
+        elif cmd in ("/supprimer", "-supprimer"):
+            delete_project()
+            if active_project is None:
+                startup_menu()
         elif cmd in ("/etat", "-etat"):
             show_project_status()
         elif cmd in ("/fichiers", "-fichiers"):
