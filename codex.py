@@ -763,6 +763,7 @@ class CodexLocalApp(App):
         self._typing_pos = 0
         self._typing_timer = None
         self._typing_stats = {"added": 0, "modified": 0, "deleted": 0}
+        self._typing_chunk = 24
         self.mode = "codex"
         self.chat_history = []
         self._chat_typing_text = ""
@@ -1010,35 +1011,59 @@ class CodexLocalApp(App):
     def _start_typing(self, code, stats=None):
         if self._typing_timer:
             self._typing_timer.stop()
+            self._typing_timer = None
         self._typing_text = code
         self._typing_pos = 0
         self._typing_stats = stats or {"added": 0, "modified": 0, "deleted": 0}
-        self.query_one("#editor", TextArea).text = ""
-        # Environ 1,3× une frappe humaine, affichée par petits groupes.
-        self._typing_timer = self.set_interval(0.035, self._typing_tick)
+        editor = self.query_one("#editor", TextArea)
+        editor.text = ""
+
+        size = len(code)
+        if size > 24000:
+            editor.text = code
+            self._typing_pos = size
+            self._finish_typing_status()
+            return
+        elif size > 12000:
+            self._typing_chunk = 240
+        elif size > 5000:
+            self._typing_chunk = 120
+        elif size > 1500:
+            self._typing_chunk = 60
+        else:
+            self._typing_chunk = 24
+
+        self._typing_timer = self.set_interval(0.06, self._typing_tick)
+
+    def _finish_typing_status(self):
+        if self.current_path:
+            s = self._typing_stats
+            self.query_one("#editor_title", Static).update(
+                "CODEX • SAUVEGARDÉ • 📄 " + self.current_path.name
+                + f" • +{s['added']} ajoutées • ~{s['modified']} modifiées • -{s['deleted']} supprimées"
+            )
 
     def _typing_tick(self):
         if self._typing_pos >= len(self._typing_text):
             if self._typing_timer:
                 self._typing_timer.stop()
                 self._typing_timer = None
-            if self.current_path:
-                s = self._typing_stats
-                self.query_one("#editor_title", Static).update(
-                    "CODEX • SAUVEGARDÉ • 📄 " + self.current_path.name
-                    + f" • +{s['added']} ajoutées • ~{s['modified']} modifiées • -{s['deleted']} supprimées"
-                )
+            self._finish_typing_status()
             return
-        # 2 caractères/tick ≈ 57 caractères/s : effet fluide 1,3×.
-        self._typing_pos = min(self._typing_pos + 2, len(self._typing_text))
+
+        self._typing_pos = min(
+            self._typing_pos + self._typing_chunk,
+            len(self._typing_text),
+        )
         self.query_one("#editor", TextArea).text = self._typing_text[:self._typing_pos]
+
         if self.current_path:
             s = self._typing_stats
             progress = self._typing_pos / max(1, len(self._typing_text))
             added_now = round(s["added"] * progress)
             modified_now = round(s["modified"] * progress)
             self.query_one("#editor_title", Static).update(
-                "CODEX • ÉCRITURE • 📄 " + self.current_path.name
+                "CODEX • ÉCRITURE TURBO • 📄 " + self.current_path.name
                 + f" • +{added_now}/{s['added']} ajoutées"
                 + f" • ~{modified_now}/{s['modified']} modifiées"
                 + f" • -{s['deleted']} supprimées"
