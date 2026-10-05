@@ -728,6 +728,9 @@ class CodexLocalApp(App):
         super().__init__()
         self.root = Path(root).resolve()
         self.current_path = None
+        self._typing_text = ""
+        self._typing_pos = 0
+        self._typing_timer = None
 
     def compose(self) -> ComposeResult:
         yield Static(ASCII_TI_LEX + "\n" + ASCII_CODEX + "\nLOCAL AI • CODING • DEVELOPER TERMINAL", id="brand")
@@ -811,14 +814,36 @@ class CodexLocalApp(App):
             target = (self.root / result.changed[-1]).resolve()
             if target.is_file():
                 self.current_path = target
-                self.query_one("#editor", TextArea).text = (
-                    generated_code or target.read_text(encoding="utf-8", errors="replace")
-                )
+                code = generated_code or target.read_text(encoding="utf-8", errors="replace")
                 self.query_one("#editor_title", Static).update(
-                    "CODEX • CODE GÉNÉRÉ + SAUVEGARDÉ • 📄 "
+                    "CODEX • ÉCRITURE NÉON 1.3× • 📄 "
                     + target.name + " • " + str(len(result.changed)) + " fichier(s)"
                 )
+                self._start_typing(code)
         self.query_one("#user_input", Input).focus()
+
+    def _start_typing(self, code):
+        if self._typing_timer:
+            self._typing_timer.stop()
+        self._typing_text = code
+        self._typing_pos = 0
+        self.query_one("#editor", TextArea).text = ""
+        # Environ 1,3× une frappe humaine, affichée par petits groupes.
+        self._typing_timer = self.set_interval(0.035, self._typing_tick)
+
+    def _typing_tick(self):
+        if self._typing_pos >= len(self._typing_text):
+            if self._typing_timer:
+                self._typing_timer.stop()
+                self._typing_timer = None
+            if self.current_path:
+                self.query_one("#editor_title", Static).update(
+                    "CODEX • CODE NÉON + SAUVEGARDÉ • 📄 " + self.current_path.name
+                )
+            return
+        # 2 caractères/tick ≈ 57 caractères/s : effet fluide 1,3×.
+        self._typing_pos = min(self._typing_pos + 2, len(self._typing_text))
+        self.query_one("#editor", TextArea).text = self._typing_text[:self._typing_pos]
 
     def on_button_pressed(self, event):
         if event.button.id == "tool_save":
