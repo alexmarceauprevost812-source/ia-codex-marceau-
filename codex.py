@@ -85,22 +85,45 @@ session = PromptSession()
 active_project = None
 
 BANNER = """TI-LEX CODEX
-LOCAL AI • CODING • GAMER DARK"""
+LOCAL AI • CODING • DEVELOPER TERMINAL"""
 
-HELP = """[tilex.command]/chat[/]              Discuter librement avec l'IA
-[tilex.command]/retour[/]            Revenir au projet depuis le chat
-[tilex.command]/nouveau[/]           Créer et ouvrir un nouveau projet
-[tilex.command]/projets[/]           Choisir un autre projet
-[tilex.command]/ouvrir FICHIER[/]    Afficher le code en couleurs
-[tilex.command]/explique FICHIER[/]  Expliquer un fichier
-[tilex.command]/corrige FICHIER[/]   Analyser et proposer une correction
-[tilex.command]/run FICHIER[/]       Exécuter un fichier Python après confirmation
-[tilex.command]/police[/]            Choisir une police
-[tilex.command]/aide[/]              Afficher cette aide
-[tilex.command]/quitter[/]           Fermer TI-LEX CODEX
+ASCII_TI_LEX = r""" ________  ____        __    _______  __
+/_  __/ / / /         / /   / ____/ |/ /
+ / / / /_/ /  ______ / /   / __/  |   /
+/ / / __  /  /_____/ / /___/ /___ /   |
+/_/ /_/ /_/          /_____/_____//_/|_|"""
 
-[tilex.info]Dans un projet, écris directement ce que tu veux coder :[/]
-[tilex.value]ex. « crée une calculatrice Python » ou « explique mon main.py »[/]"""
+ASCII_CODEX = r"""   ______ ____  ____  _______  __
+  / ____// __ \/ __ \/ ____/ |/ /
+ / /    / / / / / / / __/  |   /
+/ /___ / /_/ / /_/ / /___ /   |
+\____/ \____/_____/_____//_/|_|"""
+
+def show_logo():
+    console.print(ASCII_TI_LEX, style="bold dark_orange")
+    console.print(ASCII_CODEX, style="bold #39FF14")
+    console.print("[tilex.info]LOCAL AI • CODING • DEVELOPER TERMINAL[/]", justify="center")
+
+HELP = """[tilex.action]PROJETS[/]
+[tilex.command]/nouveau[/]             Créer un projet
+[tilex.command]/projets[/]             Choisir/continuer un projet
+[tilex.command]/etat[/]                Tableau de bord du projet actif
+[tilex.command]/fichiers[/]            Lister les fichiers du projet
+
+[tilex.action]CODE & FICHIERS[/]
+[tilex.command]/ouvrir FICHIER[/]     Afficher le code en couleurs
+[tilex.command]/chercher TEXTE[/]     Rechercher dans les fichiers du projet
+[tilex.command]/explique FICHIER[/]   Expliquer un fichier avec l'IA
+[tilex.command]/corrige FICHIER[/]    Analyser et proposer une correction
+[tilex.command]/run FICHIER[/]        Exécuter un fichier Python après confirmation
+
+[tilex.action]ASSISTANT[/]
+[tilex.command]/chat[/]               Discussion avec l'IA
+[tilex.command]/aide[/]               Aide et commandes
+[tilex.command]/police[/]             Choisir la police
+[tilex.command]/quitter[/]            Fermer TI-LEX CODEX
+
+[tilex.info]Tu peux aussi écrire directement ce que tu veux coder dans le projet actif.[/]"""
 
 def fluid(text, delay=None):
     delay = config.get("stream_delay", 0.008) if delay is None else delay
@@ -352,6 +375,70 @@ def create_project(name):
     console.print(f"[tilex.info]PROJET ACTIF : {root.name}[/]")
     console.print("[dim]Aucun fichier n'a été envoyé sur Internet ou GitHub.[/]")
 
+def project_files():
+    if not active_project:
+        return []
+    return sorted(
+        p for p in active_project.rglob("*")
+        if p.is_file() and ".git" not in p.parts and ".venv" not in p.parts
+    )
+
+def show_project_status():
+    files = project_files()
+    total_bytes = sum(p.stat().st_size for p in files)
+    table = Table(title=f"PROJET • {active_project.name}", border_style="medium_purple1")
+    table.add_column("INFO", style="bright_cyan")
+    table.add_column("VALEUR", style="bright_green")
+    table.add_row("Dossier", str(active_project))
+    table.add_row("Fichiers", str(len(files)))
+    table.add_row("Taille", f"{total_bytes / 1024:.1f} KB")
+    table.add_row("Python", str(sum(1 for p in files if p.suffix == ".py")))
+    console.print(table)
+
+def show_project_files():
+    files = project_files()
+    table = Table(title=f"FICHIERS • {active_project.name}", border_style="bright_cyan")
+    table.add_column("#", style="bright_yellow")
+    table.add_column("Fichier", style="#39FF14")
+    table.add_column("Type", style="bright_cyan")
+    for i, p in enumerate(files, 1):
+        table.add_row(str(i), str(p.relative_to(active_project)), p.suffix or "fichier")
+    console.print(table)
+
+def search_project(term):
+    term = term.strip()
+    if not term:
+        console.print("[tilex.warning]Utilisation : /chercher TEXTE[/]")
+        return
+    results = []
+    for p in project_files():
+        try:
+            for n, line in enumerate(p.read_text(errors="replace").splitlines(), 1):
+                if term.lower() in line.lower():
+                    results.append((str(p.relative_to(active_project)), n, line.strip()))
+                    if len(results) >= 50:
+                        break
+        except Exception:
+            pass
+        if len(results) >= 50:
+            break
+    table = Table(title=f"RECHERCHE • {term}", border_style="dark_orange")
+    table.add_column("Fichier", style="bright_cyan")
+    table.add_column("Ligne", style="bright_yellow")
+    table.add_column("Résultat", style="#39FF14")
+    for path, line_no, line in results:
+        table.add_row(path, str(line_no), line[:100])
+    console.print(table if results else "[tilex.warning]Aucun résultat.[/]")
+
+def show_dev_menu():
+    console.print(Panel(
+        "[tilex.action]PROJET[/]  /nouveau  /projets  /etat  /fichiers\n"
+        "[tilex.action]CODE[/]    /ouvrir  /chercher  /explique  /corrige  /run\n"
+        "[tilex.action]IA[/]      /chat    /aide     /police    /quitter",
+        title=f"TI-LEX CODEX • {active_project.name}",
+        border_style="medium_purple1"
+    ))
+
 def startup_menu():
     global active_project
     while active_project is None:
@@ -426,13 +513,13 @@ def chat_loop(help_mode=False):
 def main():
     global active_project
     console.clear()
-    console.print(Panel(Text(BANNER, style="bold bright_green", justify="center"), border_style="medium_purple1"))
+    show_logo()
     if not (Path.home() / ".ti_lex_codex" / "config.json").exists():
         choose_font()
 
     startup_menu()
     console.print(f"[tilex.success]✓ MODE CODEX • PROJET : {active_project.name}[/]")
-    console.print("[tilex.info]Écris directement ce que tu veux coder. /aide pour les commandes, /chat pour discuter.[/]")
+    console.print("[tilex.info]Écris directement ce que tu veux coder. /aide pour les commandes, /chat pour discuter.[/]")\n    show_dev_menu()
 
     while True:
         cmd = session.prompt(f"TI-LEX CODEX [{active_project.name}] › ").strip()
@@ -456,6 +543,14 @@ def main():
             startup_menu()
             if active_project is None:
                 active_project = old
+        elif cmd in ("/etat", "-etat"):
+            show_project_status()
+        elif cmd in ("/fichiers", "-fichiers"):
+            show_project_files()
+        elif cmd.startswith("/chercher ") or cmd.startswith("-chercher "):
+            search_project(cmd.split(" ", 1)[1])
+        elif cmd in ("/menu", "-menu"):
+            show_dev_menu()
         elif cmd in ("/police", "-police"):
             choose_font()
         elif cmd.startswith("/ouvrir ") or cmd.startswith("-ouvrir "):
