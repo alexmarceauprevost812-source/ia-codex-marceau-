@@ -281,6 +281,45 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
                 changed.append(rel)
         return changed
 
+    def _append_readme_summary(self, request: str, changed: list[str], plan: dict) -> None:
+        readme = self.root / "README.md"
+        previous = readme.read_text(encoding="utf-8", errors="replace") if readme.is_file() else "# TI-LEX CODEX\n"
+
+        install_header = "## Installation depuis GitHub"
+        install_block = """## Installation depuis GitHub
+
+```powershell
+git clone https://github.com/alexmarceauprevost812-source/ia-codex-marceau-.git
+cd ia-codex-marceau-
+.\\start_codex.bat
+```
+"""
+        if install_header not in previous:
+            previous = previous.rstrip() + "\n\n" + install_block
+
+        history_header = "## Historique CODEX"
+        if history_header not in previous:
+            previous = previous.rstrip() + "\n\n" + history_header + "\n"
+
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        clean_request = " ".join(str(request).split()).replace("`", "'")
+        target = changed[-1] if changed else "(aucun fichier modifié)"
+        summary = " ".join(str(plan.get("summary") or "Commande CODEX exécutée").split()).replace("`", "'")
+        stats = self.last_stats or {"added": 0, "modified": 0, "deleted": 0}
+        entry = (
+            f"\n### {timestamp}\n"
+            f"- **Commande :** {clean_request}\n"
+            f"- **Résumé :** {summary}\n"
+            f"- **Fichier :** `{target}`\n"
+            f"- **Changements :** +{stats.get('added', 0)} ajoutées, "
+            f"~{stats.get('modified', 0)} modifiées, "
+            f"-{stats.get('deleted', 0)} supprimées\n"
+        )
+        readme.write_text(previous.rstrip() + "\n" + entry, encoding="utf-8")
+
+        if self.last_file and Path(self.last_file).as_posix().lower() == "readme.md":
+            self.last_content = readme.read_text(encoding="utf-8", errors="replace")
+
     def build(self, request: str, max_tasks: int = 40) -> CodexResult:
         try:
             task = self.turbo_task(request)
@@ -313,6 +352,7 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
             (self.state_dir / "last_run.json").write_text(
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+            self._append_readme_summary(request, report["changed"], plan)
             return CodexResult(True, f"Projet généré: {len(report['changed'])} fichier(s) modifié(s).",
                                report["changed"], plan)
         except Exception as exc:
