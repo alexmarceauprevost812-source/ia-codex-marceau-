@@ -2,6 +2,7 @@
 from pathlib import Path
 import subprocess
 import os
+import zipfile
 import shutil
 import sys
 import time
@@ -762,6 +763,8 @@ class CodexLocalApp(App):
         Binding("ctrl+s", "save_file", "Sauvegarder"),
         Binding("ctrl+shift+c", "copy_current_line", "Copier ligne"),
         Binding("ctrl+shift+v", "paste_current_line", "Coller ligne"),
+        Binding("ctrl+alt+c", "copy_whole_file", "Copier fichier"),
+        Binding("ctrl+alt+v", "paste_whole_file", "Coller fichier"),
         Binding("escape", "quit", "Retour"),
     ]
 
@@ -803,6 +806,9 @@ class CodexLocalApp(App):
                 yield Button("📥 COLLER", id="tool_paste")
                 yield Button("📋 COPIER LIGNE", id="tool_copy_line")
                 yield Button("📥 COLLER LIGNE", id="tool_paste_line")
+                yield Button("📋 COPIER FICHIER", id="tool_copy_file")
+                yield Button("📥 COLLER FICHIER", id="tool_paste_file")
+                yield Button("🗜 CRÉER ZIP", id="tool_zip")
         yield Input(placeholder="✍ CODEX LOCAL › écris ta commande ici…", id="user_input")
         yield Footer()
 
@@ -1167,6 +1173,33 @@ class CodexLocalApp(App):
                 + f" • -{s['deleted']} supprimées"
             )
 
+    def action_copy_whole_file(self):
+        editor = self.query_one("#editor", TextArea)
+        editor.select_all()
+        editor.action_copy()
+        self.notify("Fichier complet copié")
+        editor.focus()
+
+    def action_paste_whole_file(self):
+        editor = self.query_one("#editor", TextArea)
+        editor.select_all()
+        editor.action_paste()
+        self.notify("Fichier remplacé par le contenu collé")
+        editor.focus()
+
+    def _create_project_zip(self):
+        zip_path = self.root.parent / (self.root.name + ".zip")
+        ignored = {".git", ".venv", "venv", "node_modules", ".tilex", "__pycache__", ".pytest_cache"}
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+            for root, dirs, names in os.walk(self.root):
+                dirs[:] = [d for d in dirs if d not in ignored]
+                root_path = Path(root)
+                for name in names:
+                    src = root_path / name
+                    rel = src.relative_to(self.root)
+                    archive.write(src, rel)
+        self.notify("ZIP créé : " + str(zip_path.name))
+
     def action_copy_current_line(self):
         editor = self.query_one("#editor", TextArea)
         row, _column = editor.cursor_location
@@ -1197,6 +1230,12 @@ class CodexLocalApp(App):
             self.action_copy_current_line()
         elif event.button.id == "tool_paste_line":
             self.action_paste_current_line()
+        elif event.button.id == "tool_copy_file":
+            self.action_copy_whole_file()
+        elif event.button.id == "tool_paste_file":
+            self.action_paste_whole_file()
+        elif event.button.id == "tool_zip":
+            self._create_project_zip()
         elif event.button.id == "tool_run":
             self.action_save_file()
             if self.current_path and self.current_path.suffix == ".py":
