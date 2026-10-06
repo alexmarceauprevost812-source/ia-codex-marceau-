@@ -9,8 +9,8 @@ import traceback
 from pathlib import Path
 
 import requests
-from PySide6.QtCore import QObject, QThread, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPixmap, QSyntaxHighlighter, QTextCharFormat
+from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -133,6 +133,12 @@ class TiLexCodexWindow(QMainWindow):
         self.current_file: Path | None = None
         self.worker_thread: QThread | None = None
         self.worker: CodexWorker | None = None
+        self.typewriter_timer = QTimer(self)
+        self.typewriter_timer.setInterval(12)
+        self.typewriter_timer.timeout.connect(self._typewriter_step)
+        self.typewriter_text = ""
+        self.typewriter_index = 0
+        self.typewriter_chunk = 1
 
         self.setWindowTitle("TI-LEX CODEX • IA Codex Marceau")
         self.resize(1680, 980)
@@ -822,7 +828,81 @@ class TiLexCodexWindow(QMainWindow):
         icon, language = language_map.get(ext, ("📄", ext.lstrip(".").upper() or "FICHIER"))
         self.lang_badge.setText(f"{icon}  {language}  •  {path.name}")
 
+    def _animate_generated_file(self, path: Path):
+        """Affiche un fichier généré avec un effet d'écriture en temps réel."""
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            self._log(f"Lecture du fichier généré impossible : {exc}", "WARN")
+            self.open_file(path)
+            return
+
+        if self.typewriter_timer.isActive():
+            self.typewriter_timer.stop()
+
+        self.current_file = path
+        self._update_language_badge(path)
+        try:
+            rel = path.relative_to(self.project_root)
+        except ValueError:
+            rel = path
+
+        self.file_title.setText(f"✍  ÉCRITURE EN TEMPS RÉEL  •  {rel}")
+        self.top_status.setText(f"✍ CODEX ÉCRIT  •  {rel}")
+
+        self.editor.setUpdatesEnabled(False)
+        self.editor.clear()
+        self.editor.setUpdatesEnabled(True)
+
+        self.typewriter_text = content
+        self.typewriter_index = 0
+
+        # Les gros fichiers restent fluides sans prendre plusieurs minutes.
+        length = len(content)
+        if length > 30000:
+            self.typewriter_chunk = 48
+        elif length > 15000:
+            self.typewriter_chunk = 24
+        elif length > 6000:
+            self.typewriter_chunk = 10
+        elif length > 2500:
+            self.typewriter_chunk = 5
+        else:
+            self.typewriter_chunk = 2
+
+        self.editor.setReadOnly(True)
+        self.typewriter_timer.start()
+
+    def _typewriter_step(self):
+        if self.typewriter_index >= len(self.typewriter_text):
+            self.typewriter_timer.stop()
+            self.editor.setReadOnly(False)
+            if self.current_file:
+                try:
+                    rel = self.current_file.relative_to(self.project_root)
+                except ValueError:
+                    rel = self.current_file
+                self.file_title.setText(f"📄 {rel}")
+                self._log(f"Écriture en temps réel terminée : {rel}", "SUCCESS")
+            return
+
+        end = min(
+            self.typewriter_index + self.typewriter_chunk,
+            len(self.typewriter_text),
+        )
+        chunk = self.typewriter_text[self.typewriter_index:end]
+        cursor = self.editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(chunk)
+        self.editor.setTextCursor(cursor)
+        self.editor.ensureCursorVisible()
+        self.typewriter_index = end
+
     def open_file(self, path: Path):
+        if self.typewriter_timer.isActive():
+            self.typewriter_timer.stop()
+            self.editor.setReadOnly(False)
+
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -840,6 +920,9 @@ class TiLexCodexWindow(QMainWindow):
         self._log(f"Fichier ouvert : {rel}")
 
     def save_current(self):
+        if self.typewriter_timer.isActive():
+            self._log("Attends la fin de l'écriture en temps réel avant de sauvegarder.", "WARN")
+            return
         if not self.current_file:
             QMessageBox.information(self, "TI-LEX CODEX", "Aucun fichier ouvert.")
             return
@@ -1099,7 +1182,7 @@ class TiLexCodexWindow(QMainWindow):
                 first = (self.project_root / changed[0]).resolve()
                 if first.is_file():
                     try:
-                        self.open_file(first)
+                        self._animate_generated_file(first)
                     except Exception as exc:
                         self._record_gui_exception(exc, "open_changed_file")
                         self._log(f"Ouverture fichier modifié: {exc}", "WARN")
