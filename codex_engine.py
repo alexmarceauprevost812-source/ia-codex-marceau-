@@ -905,13 +905,10 @@ cd ia-codex-marceau-
 
             task = self.turbo_task(request) if mode == "FAST" else None
 
-            # DIRECT ne doit jamais partir réfléchir en PRO silencieusement.
-            # L'utilisateur peut nommer le fichier ou demander explicitement /pro.
+                # Si DIRECT ne peut pas déterminer le fichier cible,
+            # bascule automatiquement en PRO au lieu d'exiger /pro.
             if mode == "FAST" and task is None:
-                raise ValueError(
-                    "DIRECT: fichier cible ambigu. Nomme le fichier dans la commande "
-                    "(ex: 'modifie codex.py ...') ou utilise /pro."
-                )
+                mode = "PRO"
 
             if mode == "FAST" and task is not None:
                 plan = {
