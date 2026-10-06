@@ -10,8 +10,8 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
-from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
+from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QRectF, QThread, QTimer, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -92,6 +92,84 @@ class PythonHighlighter(QSyntaxHighlighter):
         for pattern, text_format in self.rules:
             for match in pattern.finditer(text):
                 self.setFormat(match.start(), match.end() - match.start(), text_format)
+
+
+class ProjectedTitle(QWidget):
+    """Titre TI-LEX avec un faisceau lumineux qui traverse les lettres."""
+
+    def __init__(self, text="▲  TI-LEX CODEX", parent=None):
+        super().__init__(parent)
+        self.text = text
+        self.reflecting = False
+        self.offset = -180.0
+
+        self.timer = QTimer(self)
+        self.timer.setInterval(28)
+        self.timer.timeout.connect(self._tick)
+
+        self.setMinimumWidth(420)
+        self.setFixedHeight(58)
+
+    def set_reflecting(self, enabled: bool):
+        self.reflecting = bool(enabled)
+        if self.reflecting:
+            if not self.timer.isActive():
+                self.timer.start()
+        else:
+            self.timer.stop()
+            self.offset = -180.0
+        self.update()
+
+    def _tick(self):
+        self.offset += 9.0
+        if self.offset > self.width() + 180:
+            self.offset = -180.0
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+
+        font = QFont("Ink Free")
+        font.setPointSize(26)
+        font.setWeight(QFont.Weight.Bold)
+        painter.setFont(font)
+
+        text_rect = self.rect().adjusted(4, 0, -4, 0)
+
+        # Texte principal.
+        painter.setPen(QColor("#f2f6ff"))
+        painter.drawText(
+            text_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            self.text,
+        )
+
+        if not self.reflecting:
+            painter.end()
+            return
+
+        # Faisceau "projecteur" qui traverse uniquement les lettres.
+        band = QRectF(self.offset, 0, 150, self.height())
+        gradient = QLinearGradient(band.left(), 0, band.right(), 0)
+        gradient.setColorAt(0.00, QColor(57, 255, 20, 0))
+        gradient.setColorAt(0.25, QColor(57, 255, 20, 70))
+        gradient.setColorAt(0.50, QColor(255, 255, 210, 255))
+        gradient.setColorAt(0.75, QColor(255, 138, 0, 90))
+        gradient.setColorAt(1.00, QColor(255, 138, 0, 0))
+
+        painter.save()
+        painter.setClipRect(band)
+        painter.setPen(QColor("#dfffaa"))
+        painter.drawText(
+            text_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            self.text,
+        )
+        painter.fillRect(band, gradient)
+        painter.restore()
+        painter.end()
 
 
 class DiffHighlighter(QSyntaxHighlighter):
@@ -213,11 +291,11 @@ class TiLexCodexWindow(QMainWindow):
 
         brand_box = QVBoxLayout()
         brand_box.setSpacing(0)
-        brand = QLabel("▲  TI-LEX CODEX")
-        brand.setObjectName("brand")
+        self.brand = ProjectedTitle("▲  TI-LEX CODEX")
+        self.brand.setObjectName("brand")
         subtitle = QLabel("IA Codex Marceau")
         subtitle.setObjectName("subtitle")
-        brand_box.addWidget(brand)
+        brand_box.addWidget(self.brand)
         brand_box.addWidget(subtitle)
 
         header_layout.addLayout(brand_box)
@@ -1111,11 +1189,15 @@ class TiLexCodexWindow(QMainWindow):
         self.thinking_index = 0
         if not self.thinking_timer.isActive():
             self.thinking_timer.start()
+        if hasattr(self, "brand"):
+            self.brand.set_reflecting(True)
         self._animate_thinking()
 
     def _stop_thinking_animation(self):
         if self.thinking_timer.isActive():
             self.thinking_timer.stop()
+        if hasattr(self, "brand"):
+            self.brand.set_reflecting(False)
         if hasattr(self, "engine_status"):
             self.engine_status.setText(f"● {self.engine_stage_text}")
 
