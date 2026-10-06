@@ -163,7 +163,7 @@ class ProjectedTitle(QWidget):
 
         painter.save()
         painter.setClipRect(band)
-        painter.setPen(QColor("#dfffaa"))
+        painter.setPen(QColor("#baff9f"))
         painter.drawText(
             text_rect,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -748,7 +748,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #panelTabButton {
                 background: #050505;
-                color: #baff64;
+                color: #39ff14;
                 border: 1px solid #00d9cc;
                 border-radius: 6px;
                 padding: 6px 10px;
@@ -768,7 +768,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #reopenPanelButton {
                 background: #020202;
-                color: #8eff55;
+                color: #39ff14;
                 border: 1px solid #39ff14;
                 border-radius: 6px;
                 padding: 5px 9px;
@@ -831,7 +831,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #engineDetail {
-                color: #dfffaa;
+                color: #baff9f;
                 font-size: 11px;
                 font-weight: 700;
             }
@@ -843,7 +843,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #engineFlow {
-                color: #8eff55;
+                color: #39ff14;
                 font-size: 11px;
                 font-weight: 700;
             }
@@ -864,7 +864,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #topStatus {
                 background: #000000;
-                color: #a9ff5a;
+                color: #39ff14;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
                 padding: 5px 10px;
@@ -875,7 +875,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #langBadge {
                 background: #000000;
-                color: #baff64;
+                color: #39ff14;
                 border: 1px solid #39ff14;
                 border-radius: 7px;
                 padding: 5px 7px;
@@ -905,7 +905,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #subtitle {
-                color: #6dffc8;
+                color: #39ff14;
                 font-size: 16px;
                 font-weight: 600;
             }
@@ -927,14 +927,14 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #sectionTitle {
-                color: #8eff55;
+                color: #39ff14;
                 font-weight: 900;
                 font-size: 15px;
                 letter-spacing: 0.5px;
             }
 
             #tabTitle {
-                color: #a9ff5a;
+                color: #39ff14;
                 background: #000000;
                 border: 1px solid #00d9cc;
                 border-bottom: 2px solid #39ff14;
@@ -958,19 +958,19 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #projectTree::item:hover {
-                background: #0a2019;
-                color: #8eff55;
+                background: #09220a;
+                color: #39ff14;
             }
 
             #projectTree::item:selected {
-                background: #234b0b;
-                color: #dfff9a;
+                background: #123d08;
+                color: #baff9f;
                 border: 1px solid #39ff14;
             }
 
             #newProjectButton {
-                background: #061607;
-                color: #8eff55;
+                background: #041304;
+                color: #39ff14;
                 border: 2px solid #39ff14;
                 border-radius: 8px;
                 padding: 8px;
@@ -978,7 +978,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #newProjectButton:hover {
-                background: #103b10;
+                background: #0b2b06;
             }
 
             #openProjectButton {
@@ -1003,7 +1003,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #cardLogo {
-                color: #7dff38;
+                color: #39ff14;
                 font-size: 54px;
                 font-weight: 900;
             }
@@ -1022,13 +1022,13 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #cardFooter {
-                color: #b8ff55;
+                color: #39ff14;
                 font-size: 11px;
                 font-weight: 700;
             }
 
             #versionLabel {
-                color: #8eff55;
+                color: #39ff14;
                 font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-weight: 900;
                 font-size: 12px;
@@ -1042,7 +1042,7 @@ class TiLexCodexWindow(QMainWindow):
                 font-weight: 600;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
-                selection-background-color: #214f25;
+                selection-background-color: #163d1a;
                 selection-color: #ffffff;
                 padding: 8px;
             }
@@ -1104,7 +1104,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             QPushButton:hover {
-                color: #8eff55;
+                color: #39ff14;
                 border-color: #39ff14;
             }
 
@@ -1248,8 +1248,8 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #newProjectButton {
-                background: #061607;
-                color: #8eff55;
+                background: #041304;
+                color: #39ff14;
             }
 
             #prompt,
