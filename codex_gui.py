@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QInputDialog,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -188,6 +189,10 @@ class TiLexCodexWindow(QMainWindow):
         self.tree.itemDoubleClicked.connect(self._open_tree_item)
         left_layout.addWidget(self.tree, 1)
 
+        new_project = QPushButton("➕  Nouveau projet")
+        new_project.clicked.connect(self.new_project)
+        left_layout.addWidget(new_project)
+
         open_project = QPushButton("📂  Ouvrir projet")
         open_project.clicked.connect(self.open_project)
         left_layout.addWidget(open_project)
@@ -231,10 +236,14 @@ class TiLexCodexWindow(QMainWindow):
         self.btn_save = self._tool_button("💾  Sauvegarder", self.save_current)
         self.btn_test = self._tool_button("🧪  Tester", self.test_current)
         self.btn_build = self._tool_button("⬢  Build", self.build_current)
+        self.btn_new = self._tool_button("➕  Nouveau projet", self.new_project)
         self.btn_open = self._tool_button("📂  Ouvrir projet", self.open_project)
         self.btn_zip = self._tool_button("🗜  Créer ZIP", self.create_zip)
 
-        for btn in (self.btn_run, self.btn_save, self.btn_test, self.btn_build, self.btn_open, self.btn_zip):
+        for btn in (
+            self.btn_run, self.btn_save, self.btn_test, self.btn_build,
+            self.btn_new, self.btn_open, self.btn_zip
+        ):
             right_layout.addWidget(btn)
 
         status_title = QLabel("🖥  STATUT / SORTIE")
@@ -617,6 +626,79 @@ class TiLexCodexWindow(QMainWindow):
         except OSError as exc:
             QMessageBox.critical(self, "Erreur sauvegarde", str(exc))
 
+    def new_project(self):
+        try:
+            parent = QFileDialog.getExistingDirectory(
+                self,
+                "Choisir où créer le nouveau projet",
+                str(self.project_root.parent),
+            )
+            if not parent:
+                return
+
+            name, ok = QInputDialog.getText(
+                self,
+                "Nouveau projet",
+                "Nom du projet :",
+            )
+            if not ok:
+                return
+
+            name = name.strip()
+            if not name:
+                QMessageBox.warning(self, "Nouveau projet", "Le nom du projet est vide.")
+                return
+
+            forbidden = '<>:"/\\|?*'
+            if name in {".", ".."} or any(ch in name for ch in forbidden) or any(ord(ch) < 32 for ch in name):
+                QMessageBox.warning(
+                    self,
+                    "Nom invalide",
+                    "Utilise un nom simple sans caractères < > : \" / \\ | ? *",
+                )
+                return
+
+            project = (Path(parent) / name).resolve()
+            if project.exists():
+                answer = QMessageBox.question(
+                    self,
+                    "Projet existant",
+                    f"Le dossier existe déjà :\n{project}\n\nVeux-tu l'ouvrir ?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if answer == QMessageBox.Yes and project.is_dir():
+                    self.current_file = None
+                    self.editor.clear()
+                    self.file_title.setText("📄 Aucun fichier ouvert")
+                    self._load_project(project)
+                return
+
+            project.mkdir(parents=False, exist_ok=False)
+            readme = project / "README.md"
+            readme.write_text(
+                f"# {name}\n\nProjet créé avec TI-LEX CODEX.\n",
+                encoding="utf-8",
+            )
+
+            self.current_file = None
+            self.editor.clear()
+            self.file_title.setText("📄 Aucun fichier ouvert")
+            self._load_project(project)
+            self._log(f"Nouveau projet créé : {project}", "SUCCESS")
+            QMessageBox.information(
+                self,
+                "Projet créé",
+                f"Le projet {name} a été créé et ouvert.",
+            )
+        except Exception as exc:
+            self._record_gui_exception(exc, "new_project")
+            self._log(f"Création projet : {exc}", "ERROR")
+            QMessageBox.critical(
+                self,
+                "Erreur création projet",
+                f"Impossible de créer le projet.\n\n{type(exc).__name__}: {exc}",
+            )
+
     def open_project(self):
         selected = QFileDialog.getExistingDirectory(self, "Ouvrir un projet", str(self.project_root))
         if selected:
@@ -824,7 +906,10 @@ class TiLexCodexWindow(QMainWindow):
             self._record_gui_exception(exc, "_codex_failed")
 
     def _set_tools_enabled(self, enabled: bool):
-        for btn in (self.btn_run, self.btn_save, self.btn_test, self.btn_build, self.btn_open, self.btn_zip):
+        for btn in (
+            self.btn_run, self.btn_save, self.btn_test, self.btn_build,
+            self.btn_new, self.btn_open, self.btn_zip
+        ):
             btn.setEnabled(enabled)
 
 
