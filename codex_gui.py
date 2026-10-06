@@ -10,13 +10,15 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
-from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QRectF, QThread, QTimer, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QObject, QParallelAnimationGroup, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
     QFrame,
+    QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -255,6 +257,13 @@ class TiLexCodexWindow(QMainWindow):
         self.typewriter_text = ""
         self.typewriter_index = 0
         self.typewriter_chunk = 1
+
+        # Transition fluide entre fichiers: dézoom -> glisse -> rezoom.
+        self.file_transition_active = False
+        self.pending_file_path: Path | None = None
+        self.file_transition_overlay = None
+        self.file_transition_backdrop = None
+        self.file_transition_group = None
 
         # Animations natives PySide6 (aucun HTML).
         self.thinking_frames = ["◐", "◓", "◑", "◒"]
@@ -1489,17 +1498,8 @@ class TiLexCodexWindow(QMainWindow):
         self.editor.ensureCursorVisible()
         self.typewriter_index = end
 
-    def open_file(self, path: Path):
-        if self.typewriter_timer.isActive():
-            self.typewriter_timer.stop()
-            self.editor.setReadOnly(False)
-
-        try:
-            content = path.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            QMessageBox.critical(self, "Erreur", str(exc))
-            return
-
+    def _apply_file_content(self, path: Path, content: str):
+        """Charge réellement le fichier dans l'éditeur sans casser l'animation."""
         self.current_file = path
         self.editor.setPlainText(content)
         self._update_language_badge(path)
@@ -1509,6 +1509,161 @@ class TiLexCodexWindow(QMainWindow):
             rel = path
         self.file_title.setText(f"📄 {rel}")
         self._log(f"Fichier ouvert : {rel}")
+
+    def _make_file_transition_overlay(self):
+        parent = self.editor.parentWidget()
+        base = self.editor.geometry()
+
+        backdrop = QLabel(parent)
+        backdrop.setStyleSheet("background:#000000; border:none;")
+        backdrop.setGeometry(base)
+        backdrop.show()
+        backdrop.raise_()
+
+        overlay = QLabel(parent)
+        overlay.setPixmap(self.editor.grab())
+        overlay.setScaledContents(True)
+        overlay.setGeometry(base)
+        overlay.setStyleSheet(
+            "background:#000000; border:1px solid #39ff14; border-radius:6px;"
+        )
+
+        glow = QGraphicsDropShadowEffect(overlay)
+        glow.setBlurRadius(32)
+        glow.setOffset(0, 0)
+        glow.setColor(QColor("#39ff14"))
+        overlay.setGraphicsEffect(glow)
+
+        overlay.show()
+        overlay.raise_()
+
+        self.file_transition_backdrop = backdrop
+        self.file_transition_overlay = overlay
+        return base
+
+    def _run_file_transition_phase(
+        self,
+        start_rect: QRect,
+        end_rect: QRect,
+        start_opacity: float,
+        end_opacity: float,
+        finished,
+    ):
+        overlay = self.file_transition_overlay
+        if overlay is None:
+            finished()
+            return
+
+        opacity = QGraphicsOpacityEffect(overlay)
+        opacity.setOpacity(start_opacity)
+        overlay.setGraphicsEffect(opacity)
+        overlay.setGeometry(start_rect)
+
+        move = QPropertyAnimation(overlay, b"geometry", self)
+        move.setDuration(230)
+        move.setStartValue(start_rect)
+        move.setEndValue(end_rect)
+        move.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+        fade = QPropertyAnimation(opacity, b"opacity", self)
+        fade.setDuration(230)
+        fade.setStartValue(start_opacity)
+        fade.setEndValue(end_opacity)
+        fade.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+        group = QParallelAnimationGroup(self)
+        group.addAnimation(move)
+        group.addAnimation(fade)
+        group.finished.connect(finished)
+        self.file_transition_group = group
+        group.start()
+
+    def _start_file_transition(self, path: Path, content: str):
+        self.file_transition_active = True
+        base = self._make_file_transition_overlay()
+
+        # Phase 1: petit dézoom + départ horizontal vers la gauche.
+        shrink_w = max(120, int(base.width() * 0.90))
+        shrink_h = max(80, int(base.height() * 0.90))
+        out_rect = QRect(
+            base.x() - int(base.width() * 0.22),
+            base.y() + int(base.height() * 0.05),
+            shrink_w,
+            shrink_h,
+        )
+
+        def switch_to_new_file():
+            self._apply_file_content(path, content)
+            QApplication.processEvents()
+
+            overlay = self.file_transition_overlay
+            if overlay is None:
+                self._finish_file_transition()
+                return
+
+            # Nouveau fichier: capture puis arrivée de droite, légèrement dézoomée.
+            overlay.setPixmap(self.editor.grab())
+            incoming = QRect(
+                base.x() + int(base.width() * 0.22),
+                base.y() + int(base.height() * 0.05),
+                shrink_w,
+                shrink_h,
+            )
+            self._run_file_transition_phase(
+                incoming,
+                base,
+                0.20,
+                1.0,
+                self._finish_file_transition,
+            )
+
+        self._run_file_transition_phase(
+            base,
+            out_rect,
+            1.0,
+            0.18,
+            switch_to_new_file,
+        )
+
+    def _finish_file_transition(self):
+        if self.file_transition_overlay is not None:
+            self.file_transition_overlay.deleteLater()
+            self.file_transition_overlay = None
+        if self.file_transition_backdrop is not None:
+            self.file_transition_backdrop.deleteLater()
+            self.file_transition_backdrop = None
+
+        self.file_transition_group = None
+        self.file_transition_active = False
+
+        pending = self.pending_file_path
+        self.pending_file_path = None
+        if pending is not None and pending != self.current_file:
+            QTimer.singleShot(20, lambda p=pending: self.open_file(p))
+
+    def open_file(self, path: Path):
+        if self.typewriter_timer.isActive():
+            self.typewriter_timer.stop()
+            self.editor.setReadOnly(False)
+
+        path = Path(path).resolve()
+
+        if self.file_transition_active:
+            self.pending_file_path = path
+            return
+
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            QMessageBox.critical(self, "Erreur", str(exc))
+            return
+
+        # Premier fichier ou réouverture du même fichier: pas besoin de transition.
+        if self.current_file is None or self.current_file == path or self.editor.width() < 100:
+            self._apply_file_content(path, content)
+            return
+
+        self._start_file_transition(path, content)
 
     def save_current(self):
         if self.typewriter_timer.isActive():
