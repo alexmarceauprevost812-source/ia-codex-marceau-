@@ -277,7 +277,7 @@ class TiLexCodexWindow(QMainWindow):
         self.editor = QPlainTextEdit()
         self.editor.setObjectName("editor")
         self.editor.setLineWrapMode(QPlainTextEdit.NoWrap)
-        pretty_font = QFont("Segoe Print")
+        pretty_font = QFont("Ink Free")
         pretty_font.setPointSize(14)
         pretty_font.setWeight(QFont.Medium)
         self.editor.setFont(pretty_font)
@@ -388,7 +388,7 @@ class TiLexCodexWindow(QMainWindow):
             QMainWindow, QWidget {
                 background: #010404;
                 color: #efffff;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 14px;
             }
 
@@ -399,7 +399,7 @@ class TiLexCodexWindow(QMainWindow):
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
                 padding: 5px 10px;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 12px;
                 font-weight: 700;
             }
@@ -410,7 +410,7 @@ class TiLexCodexWindow(QMainWindow):
                 border: 1px solid #39ff14;
                 border-radius: 7px;
                 padding: 5px 7px;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 12px;
                 font-weight: 900;
             }
@@ -421,7 +421,7 @@ class TiLexCodexWindow(QMainWindow):
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
                 padding: 3px;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 20px;
                 font-weight: 900;
             }
@@ -469,7 +469,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #ollama {
                 color: #39ff14;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-weight: 800;
                 padding: 8px 12px;
                 border: 1px solid #00d9cc;
@@ -491,7 +491,7 @@ class TiLexCodexWindow(QMainWindow):
                 border-bottom: 2px solid #39ff14;
                 border-radius: 7px;
                 padding: 7px 11px;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-weight: 800;
             }
 
@@ -584,7 +584,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #versionLabel {
                 color: #8eff55;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-weight: 900;
                 font-size: 12px;
             }
@@ -592,7 +592,7 @@ class TiLexCodexWindow(QMainWindow):
             #editor {
                 background: #010507;
                 color: #efffff;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 15px;
                 font-weight: 600;
                 border: 1px solid #00d9cc;
@@ -609,12 +609,12 @@ class TiLexCodexWindow(QMainWindow):
             #output {
                 background: #010507;
                 color: #dbffff;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 13px;
                 font-weight: 600;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 12px;
             }
 
@@ -694,7 +694,7 @@ class TiLexCodexWindow(QMainWindow):
                 border-radius: 7px;
                 padding: 8px 10px;
                 min-height: 28px;
-                font-family: "Segoe Print";
+                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
             }
 
             #prompt:focus, QComboBox:focus {
