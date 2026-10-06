@@ -893,7 +893,7 @@ class TiLexCodexWindow(QMainWindow):
                     self.current_file = None
                     self.editor.clear()
                     self.file_title.setText("📄 Aucun fichier ouvert")
-            self.lang_badge.setText("📄  AUCUN FICHIER")
+                    self.lang_badge.setText("📄  AUCUN FICHIER")
                     self._load_project(project)
                 return
 
