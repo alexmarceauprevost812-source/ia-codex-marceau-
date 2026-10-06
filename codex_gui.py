@@ -327,6 +327,10 @@ class TiLexCodexWindow(QMainWindow):
             ("Vert néon", "#39ff14"),
             ("Orange néon", "#ff7a00"),
             ("Cyan néon", "#00efff"),
+            ("Rouge néon", "#ff1744"),
+            ("Jaune néon", "#fff200"),
+            ("Rose néon", "#ff2bd6"),
+            ("Violet néon", "#9d4dff"),
         ):
             action = QAction(label, self)
             action.triggered.connect(lambda checked=False, color=value: self._set_neon_accent(color))
