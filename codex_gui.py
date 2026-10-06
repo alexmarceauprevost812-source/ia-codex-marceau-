@@ -170,6 +170,7 @@ class TiLexCodexWindow(QMainWindow):
         self.worker_thread: QThread | None = None
         self.worker: CodexWorker | None = None
         self.last_codex_request = ""
+        self.last_right_panel_index = 0
         self.typewriter_timer = QTimer(self)
         self.typewriter_timer.setInterval(12)
         self.typewriter_timer.timeout.connect(self._typewriter_step)
@@ -258,9 +259,15 @@ class TiLexCodexWindow(QMainWindow):
         self.engine_progress.setTextVisible(False)
         self.engine_progress.setMaximumWidth(220)
 
+        self.btn_reopen_panel = QPushButton("▶  PANNEAU")
+        self.btn_reopen_panel.setObjectName("reopenPanelButton")
+        self.btn_reopen_panel.setMaximumWidth(130)
+        self.btn_reopen_panel.clicked.connect(self._reopen_right_panel)
+
         engine_layout.addWidget(self.engine_status)
         engine_layout.addWidget(self.engine_flow, 1)
         engine_layout.addWidget(self.engine_progress)
+        engine_layout.addWidget(self.btn_reopen_panel)
         root_layout.addWidget(engine_panel)
 
         # ===== MAIN AREA =====
@@ -474,6 +481,7 @@ class TiLexCodexWindow(QMainWindow):
         self.setCentralWidget(root)
 
         self._show_right_panel(0)
+        self.btn_reopen_panel.setText("◀  PANNEAU")
 
         self.btn_save.setShortcut(QKeySequence("Ctrl+S"))
         self.btn_run.setShortcut(QKeySequence("F5"))
@@ -482,6 +490,7 @@ class TiLexCodexWindow(QMainWindow):
         self.btn_open.setShortcut(QKeySequence("Ctrl+O"))
 
     def _show_right_panel(self, index: int):
+        self.last_right_panel_index = index
         self.right_stack.setCurrentIndex(index)
 
         self.btn_panel_tools.setProperty("active", index == 0)
@@ -493,6 +502,8 @@ class TiLexCodexWindow(QMainWindow):
         if not self.right_panel.isVisible():
             self.right_panel.show()
             self.right_panel.setMaximumWidth(0)
+            if hasattr(self, "btn_reopen_panel"):
+                self.btn_reopen_panel.setText("◀  PANNEAU")
 
             self.panel_animation.stop()
             self.panel_animation.setTargetObject(self.right_panel)
@@ -506,6 +517,9 @@ class TiLexCodexWindow(QMainWindow):
             self.panel_animation.start()
         else:
             self.right_panel.setMaximumWidth(16777215)
+
+    def _reopen_right_panel(self):
+        self._show_right_panel(self.last_right_panel_index)
 
     def _close_right_panel(self):
         if not self.right_panel.isVisible():
@@ -527,6 +541,8 @@ class TiLexCodexWindow(QMainWindow):
     def _finish_close_right_panel(self):
         self.right_panel.hide()
         self.right_panel.setMaximumWidth(16777215)
+        if hasattr(self, "btn_reopen_panel"):
+            self.btn_reopen_panel.setText("▶  PANNEAU")
         try:
             self.panel_animation.finished.disconnect(self._finish_close_right_panel)
         except RuntimeError:
@@ -617,6 +633,21 @@ class TiLexCodexWindow(QMainWindow):
             #panelTabButton:hover {
                 border-color: #39ff14;
                 color: #ffffff;
+            }
+
+            #reopenPanelButton {
+                background: #020202;
+                color: #8eff55;
+                border: 1px solid #39ff14;
+                border-radius: 6px;
+                padding: 5px 9px;
+                font-weight: 900;
+            }
+
+            #reopenPanelButton:hover {
+                background: #102000;
+                color: #ffffff;
+                border-color: #00efff;
             }
 
             #panelCloseButton {
