@@ -920,6 +920,73 @@ cd ia-codex-marceau-
         if self.last_file and Path(self.last_file).as_posix().lower() == "readme.md":
             self.last_content = readme.read_text(encoding="utf-8", errors="replace")
 
+    def chat(self, question: str) -> CodexResult:
+        """Conversation locale avec l'IA, sans modifier aucun fichier."""
+        try:
+            question = str(question or "").strip()
+            if question.lower().startswith("/chat"):
+                question = question[5:].strip()
+            if not question:
+                return CodexResult(
+                    False,
+                    "Utilise /chat suivi de ta question. Exemple : /chat explique ce projet",
+                    [],
+                    {"mode": "CHAT"},
+                )
+
+            self.status("💬 CHAT IA • préparation de la réponse")
+
+            files = self.inventory(max_files=80)
+            project_files = "\n".join(f"- {name}" for name in files[:80])
+            memory = self._load_project_memory()
+            recent = "\n".join(
+                f"- {item.get('request', '')}: {item.get('summary', '')}"
+                for item in memory[-4:]
+            )
+
+            prompt = f"""Tu es TI-LEX CODEX, assistant local de programmation.
+Tu réponds en français clair et directement à la question.
+MODE CHAT UNIQUEMENT: ne propose pas de modifier automatiquement des fichiers et n'écris aucun fichier.
+
+Projet: {self.root.name}
+
+Fichiers du projet:
+{project_files or "(aucun fichier détecté)"}
+
+Historique récent:
+{recent or "(aucun historique)"}
+
+Question utilisateur:
+{question}
+
+Réponds comme un assistant de développement utile. Si la question concerne un fichier précis mais que son contenu n'est pas fourni, indique ce qu'il faudrait ouvrir ou préciser."""
+
+            answer = self._ask(
+                prompt,
+                temperature=0.35,
+                json_mode=False,
+                num_predict=1200,
+                read_timeout=150,
+            )
+            self.status("✅ CHAT IA • réponse terminée")
+            return CodexResult(
+                True,
+                answer,
+                [],
+                {
+                    "mode": "CHAT",
+                    "question": question,
+                },
+            )
+        except Exception as exc:
+            self.status(f"❌ CHAT IA • {exc}")
+            return CodexResult(
+                False,
+                f"Erreur CHAT IA: {exc}",
+                [],
+                {"mode": "CHAT"},
+            )
+
     def build(self, request: str, max_tasks: int = 40) -> CodexResult:
         try:
             self.last_outputs = {}
