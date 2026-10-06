@@ -1166,7 +1166,96 @@ class TiLexCodexWindow(QMainWindow):
             QToolTip {
                 background: #020606;
                 color: #39ff14;
-                border: 1px solid #39ff14;
+                border: none;
+            }
+
+            /* ===== MODE PLAT TI-LEX =====
+               Aucun cadre bleu/cyan ou vert lime. */
+            #header,
+            #enginePanel,
+            #panel,
+            #commandBar,
+            #projectTree,
+            #editor,
+            #output,
+            #diffView,
+            #tabTitle,
+            #langBadge,
+            #topStatus,
+            #ollama,
+            #engineProgress,
+            #infoCard,
+            #reflexionAvatar,
+            #panelTabButton,
+            #reopenPanelButton,
+            #newProjectButton,
+            #clearButton,
+            #prompt,
+            QComboBox {
+                border: none;
+            }
+
+            #header,
+            #enginePanel,
+            #panel,
+            #commandBar,
+            #projectTree,
+            #editor,
+            #output,
+            #diffView,
+            #tabTitle,
+            #langBadge,
+            #topStatus,
+            #ollama,
+            #infoCard,
+            #reflexionAvatar {
+                border-radius: 0px;
+                background: #000000;
+            }
+
+            #reflexionAvatar {
+                padding: 0px;
+            }
+
+            #engineProgress {
+                background: #0a0a0a;
+                border-radius: 4px;
+            }
+
+            #panelTabButton,
+            #reopenPanelButton,
+            #clearButton {
+                background: #000000;
+            }
+
+            #panelTabButton:hover,
+            #reopenPanelButton:hover,
+            #clearButton:hover {
+                background: #0d0d0d;
+            }
+
+            #newProjectButton {
+                background: #061607;
+                color: #8eff55;
+            }
+
+            #prompt,
+            QComboBox {
+                background: #050505;
+            }
+
+            #prompt:focus,
+            QComboBox:focus {
+                border: none;
+            }
+
+            QSplitter::handle {
+                background: #000000;
+                width: 2px;
+            }
+
+            QSplitter::handle:hover {
+                background: #151515;
             }
         """)
 
