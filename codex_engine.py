@@ -598,10 +598,10 @@ Règles:
         return excerpt
 
     def generate_fast_task(self, request: str, task: dict) -> list[dict]:
-        """FAST ULTRA: un seul appel Qwen court, sans planification ni réparation."""
+        """DIRECT: un appel Qwen, fichier final complet, aucune seconde réflexion."""
         targets = [str(x) for x in task.get("files", [])][:1]
         if not targets:
-            raise ValueError("FAST: aucun fichier cible.")
+            raise ValueError("DIRECT: aucun fichier cible.")
 
         target = targets[0]
         target_path = self._safe(target)
@@ -610,71 +610,70 @@ Règles:
             if target_path.is_file() else ""
         )
 
-        if old_content:
-            excerpt = self._fast_excerpt(old_content, request, max_chars=3200)
-            prompt = f"""TI-LEX FAST ULTRA.
-Fichier: {target}
-Demande: {request}
-
-EXTRAIT EXACT:
-{excerpt}
-
-Retourne exactement ceci, sans explication:
-<<<OLD>>>
-texte exact à remplacer
-<<<NEW>>>
-nouveau texte
-<<<END>>>
-
-Une seule modification. OLD doit exister exactement dans l'extrait."""
-            self.status(f"⚡ FAST ULTRA • modification immédiate • {target}")
-
-            answer = self._ask(
-                prompt,
-                temperature=0.0,
-                num_predict=220,
-                read_timeout=25,
+        # Qwen 7B / ctx 4096: garde de la place pour une vraie sortie de code.
+        # Pour un fichier existant raisonnable, on fournit le contenu complet.
+        # Pour un très gros fichier, DIRECT refuse plutôt que d'inventer un mini fichier.
+        if len(old_content) > 9000:
+            raise ValueError(
+                f"DIRECT: {target} est trop gros pour une réécriture complète rapide. "
+                "Utilise /pro pour ce fichier."
             )
-            match = re.search(
-                r"<<<OLD>>>\s*([\s\S]*?)\s*<<<NEW>>>\s*([\s\S]*?)\s*<<<END>>>",
-                answer,
-            )
-            if not match:
-                raise ValueError("FAST: réponse de modification invalide.")
 
-            old = match.group(1)
-            new = match.group(2)
-            if not old or old_content.count(old) != 1:
-                raise ValueError("FAST: zone de remplacement absente ou ambiguë.")
+        prompt = f"""Tu es TI-LEX CODEX DIRECT.
+Tu dois exécuter UNE commande de programmation immédiatement.
 
-            updated = old_content.replace(old, new, 1)
-            valid, error = self._validate_generated_content(target, updated)
-            if not valid:
-                raise ValueError(f"FAST: validation refusée: {error}")
+FICHIER CIBLE: {target}
+COMMANDE: {request}
 
-            return [{"path": target, "content": updated}]
+FICHIER ACTUEL:
+{old_content if old_content else "(nouveau fichier)"}
 
-        # Nouveau fichier: toujours un seul appel, sortie courte.
-        prompt = f"""TI-LEX FAST ULTRA.
-Crée immédiatement le fichier {target}.
-Demande: {request}
-
-Retourne uniquement le contenu brut du fichier, sans Markdown ni explication."""
-        self.status(f"⚡ FAST ULTRA • création immédiate • {target}")
+CONTRAT OBLIGATOIRE:
+- Retourne le CONTENU FINAL COMPLET du fichier {target}.
+- Pas de résumé, pas d'explication, pas de Markdown, pas de diff.
+- Pas de pseudo-code, pas de TODO, pas de points de suspension.
+- Si le fichier existe, conserve tout ce qui n'est pas concerné par la commande.
+- Le résultat doit être du vrai code correspondant à l'extension de {target}.
+- Ne remplace jamais une vraie application par un exemple minimal du genre print("Bonjour").
+- N'écris qu'un seul fichier.
+"""
+        self.status(f"⚡ DIRECT • Qwen écrit le fichier complet • {target}")
         content = self._clean_model_output(
             self._ask(
                 prompt,
                 temperature=0.05,
-                num_predict=700,
-                read_timeout=60,
+                num_predict=2600,
+                read_timeout=120,
             )
         )
         if not content:
-            raise ValueError("FAST: réponse vide.")
+            raise ValueError("DIRECT: Qwen a retourné une réponse vide.")
 
         valid, error = self._validate_generated_content(target, content)
         if not valid:
-            raise ValueError(f"FAST: validation refusée: {error}")
+            raise ValueError(f"DIRECT: code refusé avant sauvegarde: {error}")
+
+        # Protection anti-miniature: une modification ne doit pas écraser un vrai
+        # fichier par quelques lignes sans demande explicite.
+        old_lines = old_content.splitlines()
+        new_lines = content.splitlines()
+        destructive = any(
+            word in request.lower()
+            for word in (
+                "supprime", "efface", "vide le fichier", "remplace tout",
+                "réécris tout", "reecris tout",
+            )
+        )
+        if (
+            old_lines
+            and not destructive
+            and len(old_lines) >= 20
+            and len(new_lines) < max(8, int(len(old_lines) * 0.60))
+        ):
+            raise ValueError(
+                f"DIRECT: résultat trop court ({len(new_lines)} lignes) pour "
+                f"remplacer {len(old_lines)} lignes. Fichier original conservé."
+            )
 
         return [{"path": target, "content": content}]
 
@@ -853,22 +852,24 @@ cd ia-codex-marceau-
                 raise ValueError("Commande vide après sélection du mode.")
 
             self.status(
-                "⚡ MODE FAST ULTRA • exécution immédiate" if mode == "FAST"
+                "⚡ MODE DIRECT • 1 appel Qwen • fichier complet" if mode == "FAST"
                 else "🧠 MODE PRO • analyse approfondie"
             )
 
             task = self.turbo_task(request) if mode == "FAST" else None
 
-            # Si FAST ne peut pas identifier une cible de façon sûre,
-            # bascule automatiquement en PRO au lieu de deviner un fichier.
+            # DIRECT ne doit jamais partir réfléchir en PRO silencieusement.
+            # L'utilisateur peut nommer le fichier ou demander explicitement /pro.
             if mode == "FAST" and task is None:
-                mode = "PRO"
-                self.status("🧠 MODE PRO • cible ambiguë • analyse du projet")
+                raise ValueError(
+                    "DIRECT: fichier cible ambigu. Nomme le fichier dans la commande "
+                    "(ex: 'modifie codex.py ...') ou utilise /pro."
+                )
 
             if mode == "FAST" and task is not None:
                 plan = {
-                    "summary": "Mode FAST sans planification IA",
-                    "architecture": ["1 commande", "1 fichier", "plan IA évité"],
+                    "summary": "Mode DIRECT: un appel Qwen, fichier complet",
+                    "architecture": ["1 commande", "1 fichier", "1 appel Qwen", "fichier complet"],
                     "tasks": [task],
                     "request": request,
                     "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
