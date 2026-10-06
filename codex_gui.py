@@ -107,6 +107,7 @@ class ProjectedTitle(QWidget):
         self.reflecting = False
         self.offset = -180.0
         self.font_family = "Ink Free"
+        self.accent_color = "#39ff14"
 
         self.timer = QTimer(self)
         self.timer.setInterval(28)
@@ -117,6 +118,10 @@ class ProjectedTitle(QWidget):
 
     def set_font_family(self, family: str):
         self.font_family = str(family or "Ink Free")
+        self.update()
+
+    def set_accent_color(self, color: str):
+        self.accent_color = str(color or "#39ff14")
         self.update()
 
     def set_reflecting(self, enabled: bool):
@@ -148,7 +153,7 @@ class ProjectedTitle(QWidget):
         text_rect = self.rect().adjusted(4, 0, -4, 0)
 
         # Texte principal.
-        painter.setPen(QColor("#f2f6ff"))
+        painter.setPen(QColor(self.accent_color))
         painter.drawText(
             text_rect,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -162,15 +167,22 @@ class ProjectedTitle(QWidget):
         # Faisceau "projecteur" qui traverse uniquement les lettres.
         band = QRectF(self.offset, 0, 150, self.height())
         gradient = QLinearGradient(band.left(), 0, band.right(), 0)
-        gradient.setColorAt(0.00, QColor(57, 255, 20, 0))
-        gradient.setColorAt(0.25, QColor(57, 255, 20, 70))
-        gradient.setColorAt(0.50, QColor(255, 255, 210, 255))
-        gradient.setColorAt(0.75, QColor(255, 138, 0, 90))
-        gradient.setColorAt(1.00, QColor(255, 138, 0, 0))
+        accent = QColor(self.accent_color)
+        transparent = QColor(accent)
+        transparent.setAlpha(0)
+        soft = QColor(accent)
+        soft.setAlpha(90)
+        bright = QColor(accent)
+        bright.setAlpha(255)
+        gradient.setColorAt(0.00, transparent)
+        gradient.setColorAt(0.25, soft)
+        gradient.setColorAt(0.50, bright)
+        gradient.setColorAt(0.75, soft)
+        gradient.setColorAt(1.00, transparent)
 
         painter.save()
         painter.setClipRect(band)
-        painter.setPen(QColor("#baff9f"))
+        painter.setPen(QColor(self.accent_color))
         painter.drawText(
             text_rect,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -195,6 +207,13 @@ class DiffHighlighter(QSyntaxHighlighter):
         self.file = QTextCharFormat()
         self.file.setForeground(QColor("#ff9d21"))
         self.file.setFontWeight(QFont.Bold)
+
+    def set_accent_color(self, color: str):
+        accent = QColor(str(color or "#39ff14"))
+        self.added.setForeground(accent)
+        self.header.setForeground(accent)
+        self.file.setForeground(accent)
+        self.rehighlight()
 
     def highlightBlock(self, text: str):
         if text.startswith("+++ ") or text.startswith("--- ") or text.startswith("@@"):
@@ -294,6 +313,9 @@ class TiLexCodexWindow(QMainWindow):
         self._build_ui()
         if hasattr(self, "brand"):
             self.brand.set_font_family(self.display_font)
+            self.brand.set_accent_color(self.neon_accent)
+        if hasattr(self, "diff_highlighter"):
+            self.diff_highlighter.set_accent_color(self.neon_accent)
         self._apply_theme()
         self._apply_display_overrides()
         self._load_project(self.project_root)
@@ -806,6 +828,10 @@ class TiLexCodexWindow(QMainWindow):
 
     def _set_neon_accent(self, color: str):
         self.neon_accent = color
+        if hasattr(self, "brand"):
+            self.brand.set_accent_color(self.neon_accent)
+        if hasattr(self, "diff_highlighter"):
+            self.diff_highlighter.set_accent_color(self.neon_accent)
         self._apply_theme()
         self._apply_display_overrides()
 
@@ -860,9 +886,32 @@ class TiLexCodexWindow(QMainWindow):
                 font-family: "{font}";
             }}
 
-            #sectionTitle, #subtitle, #engineFlow, #engineDetail,
-            #langBadge, #versionLabel, #cardFooter {{
+            #sectionTitle,
+            #subtitle,
+            #engineFlow,
+            #engineDetail,
+            #engineStatus,
+            #langBadge,
+            #versionLabel,
+            #cardFooter,
+            #tabTitle,
+            #topStatus,
+            #ollama,
+            #resultsSummary,
+            #cardLogo,
+            #cardTitle,
+            #headerNav {{
                 color: {accent};
+            }}
+
+            #projectTree::item:hover {{
+                color: {accent};
+            }}
+
+            #projectTree::item:selected {{
+                background: {accent};
+                color: #000000;
+                border: none;
             }}
 
             #displayMenuButton {{
@@ -937,7 +986,11 @@ class TiLexCodexWindow(QMainWindow):
             #prompt, QComboBox {{
                 color: {text};
                 background: {panel};
-                border-color: {accent};
+                border: 1px solid {accent};
+            }}
+
+            #prompt:focus, QComboBox:focus {{
+                border: 1px solid {accent};
             }}
 
             #engineProgress::chunk {{
@@ -949,6 +1002,14 @@ class TiLexCodexWindow(QMainWindow):
             }}
 
             QScrollBar::handle:vertical {{
+                background: {accent};
+            }}
+
+            QScrollBar::handle:vertical:hover {{
+                background: {accent};
+            }}
+
+            QSplitter::handle:hover {{
                 background: {accent};
             }}
         """
