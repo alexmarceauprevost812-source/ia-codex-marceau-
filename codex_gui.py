@@ -5,6 +5,7 @@ import py_compile
 import shutil
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 import requests
@@ -109,7 +110,17 @@ class CodexWorker(QObject):
             )
             result = engine.build(self.request)
             self.finished.emit((result, dict(engine.last_outputs)))
-        except Exception as exc:
+        except BaseException as exc:
+            # Empêche une erreur du moteur de tuer toute l'interface graphique.
+            try:
+                state_dir = self.root / ".tilex"
+                state_dir.mkdir(parents=True, exist_ok=True)
+                (state_dir / "gui_worker_error.log").write_text(
+                    traceback.format_exc(),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
             self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
@@ -675,70 +686,142 @@ class TiLexCodexWindow(QMainWindow):
             self._log("Ollama non détecté sur 127.0.0.1:11434", "WARN")
 
     def send_codex(self):
-        request = self.prompt.text().strip()
-        if not request:
-            return
+        try:
+            # Une seule commande à la fois : évite les collisions de QThread.
+            if self.worker_thread is not None and self.worker_thread.isRunning():
+                self._log("Une commande CODEX est déjà en cours.", "WARN")
+                return
 
-        mode = self.mode_combo.currentText()
-        if mode == "PRO":
-            request = "/pro " + request
-        elif mode == "DIRECT":
-            request = "/fast " + request
+            request = self.prompt.text().strip()
+            if not request:
+                return
 
-        self.prompt.clear()
-        self.prompt.setEnabled(False)
-        self._set_tools_enabled(False)
-        self._log(f"Commande : {request}")
-        self._log("CODEX travaille…", "INFO")
+            mode = self.mode_combo.currentText()
+            if mode == "PRO":
+                request = "/pro " + request
+            elif mode == "DIRECT":
+                request = "/fast " + request
 
-        thread = QThread(self)
-        worker = CodexWorker(
-            self.project_root,
-            request,
-            self.config.get("model", "qwen2.5:7b"),
-        )
-        worker.moveToThread(thread)
+            self.prompt.clear()
+            self.prompt.setEnabled(False)
+            self._set_tools_enabled(False)
+            self._log(f"Commande : {request}")
+            self._log("CODEX travaille…", "INFO")
 
-        thread.started.connect(worker.run)
-        worker.status.connect(lambda msg: self._log(msg, "CODEX"))
-        worker.finished.connect(self._codex_finished)
-        worker.failed.connect(self._codex_failed)
-        worker.finished.connect(thread.quit)
-        worker.failed.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
+            thread = QThread(self)
+            worker = CodexWorker(
+                self.project_root,
+                request,
+                self.config.get("model", "qwen2.5:7b"),
+            )
+            worker.moveToThread(thread)
 
-        self.worker_thread = thread
-        self.worker = worker
-        thread.start()
+            thread.started.connect(worker.run)
+            worker.status.connect(self._safe_worker_status)
+            worker.finished.connect(self._codex_finished)
+            worker.failed.connect(self._codex_failed)
+            worker.finished.connect(thread.quit)
+            worker.failed.connect(thread.quit)
+            thread.finished.connect(worker.deleteLater)
+            thread.finished.connect(thread.deleteLater)
+            thread.finished.connect(self._worker_cleanup)
+
+            self.worker_thread = thread
+            self.worker = worker
+            thread.start()
+        except BaseException as exc:
+            self._record_gui_exception(exc, "send_codex")
+            self.prompt.setEnabled(True)
+            self._set_tools_enabled(True)
+            self._log(f"{type(exc).__name__}: {exc}", "ERROR")
+            QMessageBox.critical(
+                self,
+                "Erreur CODEX",
+                f"La commande a échoué, mais l'interface reste ouverte.\n\n{type(exc).__name__}: {exc}",
+            )
+
+    def _safe_worker_status(self, message: str):
+        try:
+            self._log(str(message), "CODEX")
+        except Exception as exc:
+            self._record_gui_exception(exc, "worker_status")
+
+    def _worker_cleanup(self):
+        self.worker = None
+        self.worker_thread = None
+
+    def _record_gui_exception(self, exc: BaseException, where: str = "GUI"):
+        try:
+            state_dir = self.project_root / ".tilex"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            report = (
+                f"TI-LEX CODEX GUI ERROR\n"
+                f"ZONE: {where}\n"
+                f"TYPE: {type(exc).__name__}\n"
+                f"MESSAGE: {exc}\n\n"
+                f"{traceback.format_exc()}"
+            )
+            (state_dir / "gui_crash.log").write_text(report, encoding="utf-8")
+        except Exception:
+            pass
 
     def _codex_finished(self, payload):
-        result, outputs = payload
-        self.prompt.setEnabled(True)
-        self._set_tools_enabled(True)
+        try:
+            result, outputs = payload
+            self.prompt.setEnabled(True)
+            self._set_tools_enabled(True)
 
-        if not result.ok:
-            self._log(result.message, "ERROR")
-            QMessageBox.critical(self, "Erreur CODEX", result.message)
-            return
+            if not result.ok:
+                self._log(result.message, "ERROR")
+                QMessageBox.critical(self, "Erreur CODEX", result.message)
+                self.prompt.setFocus()
+                return
 
-        self._log(result.message, "SUCCESS")
-        changed = list(result.changed or [])
-        self._load_project(self.project_root)
+            self._log(result.message, "SUCCESS")
+            changed = list(result.changed or [])
 
-        if changed:
-            first = (self.project_root / changed[0]).resolve()
-            if first.is_file():
-                self.open_file(first)
+            # Le rafraîchissement du projet ne doit jamais fermer l'interface.
+            try:
+                self._load_project(self.project_root)
+            except Exception as exc:
+                self._record_gui_exception(exc, "refresh_project")
+                self._log(f"Rafraîchissement projet: {exc}", "WARN")
 
-        self.prompt.setFocus()
+            if changed:
+                first = (self.project_root / changed[0]).resolve()
+                if first.is_file():
+                    try:
+                        self.open_file(first)
+                    except Exception as exc:
+                        self._record_gui_exception(exc, "open_changed_file")
+                        self._log(f"Ouverture fichier modifié: {exc}", "WARN")
+
+            self.prompt.setFocus()
+        except BaseException as exc:
+            self._record_gui_exception(exc, "_codex_finished")
+            self.prompt.setEnabled(True)
+            self._set_tools_enabled(True)
+            self._log(f"{type(exc).__name__}: {exc}", "ERROR")
+            QMessageBox.critical(
+                self,
+                "Erreur interface",
+                f"Le moteur a terminé, mais l'affichage a rencontré une erreur.\n"
+                f"L'interface reste ouverte.\n\n{type(exc).__name__}: {exc}",
+            )
 
     def _codex_failed(self, message: str):
-        self.prompt.setEnabled(True)
-        self._set_tools_enabled(True)
-        self._log(message, "ERROR")
-        QMessageBox.critical(self, "Erreur CODEX", message)
-        self.prompt.setFocus()
+        try:
+            self.prompt.setEnabled(True)
+            self._set_tools_enabled(True)
+            self._log(message, "ERROR")
+            QMessageBox.critical(
+                self,
+                "Erreur CODEX",
+                "La commande a échoué, mais l'interface reste ouverte.\n\n" + str(message),
+            )
+            self.prompt.setFocus()
+        except BaseException as exc:
+            self._record_gui_exception(exc, "_codex_failed")
 
     def _set_tools_enabled(self, enabled: bool):
         for btn in (self.btn_run, self.btn_save, self.btn_test, self.btn_build, self.btn_open, self.btn_zip):
@@ -751,8 +834,29 @@ def main():
     app.setApplicationName("TI-LEX CODEX")
     app.setOrganizationName("Marceau")
     window = TiLexCodexWindow()
+
+    def gui_exception_hook(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        try:
+            state_dir = window.project_root / ".tilex"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            report = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+            (state_dir / "gui_crash.log").write_text(report, encoding="utf-8")
+            window._log(f"{exc_type.__name__}: {exc_value}", "ERROR")
+            QMessageBox.critical(
+                window,
+                "Erreur interface",
+                "Une erreur a été interceptée. TI-LEX CODEX reste ouvert.\n\n"
+                f"{exc_type.__name__}: {exc_value}",
+            )
+        except Exception:
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = gui_exception_hook
     window.show()
-    sys.exit(app.exec())
+    return app.exec()
 
 
 if __name__ == "__main__":
