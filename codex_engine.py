@@ -42,6 +42,7 @@ class CodexEngine:
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
         self.last_outputs = {}
         self.last_stats_by_file = {}
+        self.last_diffs = {}
         self.state_dir = self.root / ".tilex"
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.memory_file = self.state_dir / "project_memory.json"
@@ -861,6 +862,16 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
                         stats["modified"] += paired
                         stats["deleted"] += max(0, (i2 - i1) - paired)
                         stats["added"] += max(0, (j2 - j1) - paired)
+                diff_lines = list(difflib.unified_diff(
+                    old_lines,
+                    new_lines,
+                    fromfile=f"a/{rel}",
+                    tofile=f"b/{rel}",
+                    lineterm="",
+                    n=2,
+                ))
+                self.last_diffs[rel] = "\n".join(diff_lines)
+
                 target.write_text(content, encoding="utf-8")
                 self.last_file = rel
                 self.last_content = content
@@ -913,6 +924,7 @@ cd ia-codex-marceau-
         try:
             self.last_outputs = {}
             self.last_stats_by_file = {}
+            self.last_diffs = {}
 
             mode, clean_request = self._execution_mode(request)
             request = clean_request
