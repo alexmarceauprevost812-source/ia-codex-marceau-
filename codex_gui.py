@@ -181,7 +181,7 @@ class TiLexCodexWindow(QMainWindow):
         # Animations natives PySide6 (aucun HTML).
         self.thinking_frames = ["◐", "◓", "◑", "◒"]
         self.thinking_index = 0
-        self.engine_stage_text = "MOTEUR CODEX  •  PRÊT"
+        self.engine_stage_text = "MOTEUR DE RÉFLEXION  •  PRÊT"
         self.thinking_timer = QTimer(self)
         self.thinking_timer.setInterval(140)
         self.thinking_timer.timeout.connect(self._animate_thinking)
@@ -237,35 +237,71 @@ class TiLexCodexWindow(QMainWindow):
 
         root_layout.addWidget(header)
 
+        # ===== MOTEUR DE RÉFLEXION =====
         engine_panel = QFrame(objectName="enginePanel")
         engine_layout = QHBoxLayout(engine_panel)
-        engine_layout.setContentsMargins(10, 5, 10, 5)
+        engine_layout.setContentsMargins(8, 5, 10, 5)
         engine_layout.setSpacing(10)
 
-        self.engine_status = QLabel("● MOTEUR CODEX  •  PRÊT")
+        # Démon visuel accroché au moteur de réflexion.
+        self.reflexion_avatar = QLabel()
+        self.reflexion_avatar.setObjectName("reflexionAvatar")
+        self.reflexion_avatar.setAlignment(Qt.AlignCenter)
+        self.reflexion_avatar.setFixedSize(126, 78)
+
+        demon_candidates = [
+            Path(__file__).resolve().parent / "assets" / "reflexion_demon.png",
+            Path(__file__).resolve().parent / "assets" / "tilex_al.png",
+        ]
+        demon_pixmap = QPixmap()
+        for candidate in demon_candidates:
+            if candidate.is_file() and demon_pixmap.load(str(candidate)):
+                break
+
+        if not demon_pixmap.isNull():
+            self.reflexion_avatar.setPixmap(
+                demon_pixmap.scaled(
+                    120, 72,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        else:
+            self.reflexion_avatar.setText("😈")
+
+        engine_text = QVBoxLayout()
+        engine_text.setContentsMargins(0, 0, 0, 0)
+        engine_text.setSpacing(1)
+
+        self.engine_status = QLabel("● MOTEUR DE RÉFLEXION  •  PRÊT")
         self.engine_status.setObjectName("engineStatus")
-        self.engine_status.setMinimumWidth(260)
+
+        self.engine_detail = QLabel("En attente d’une commande…")
+        self.engine_detail.setObjectName("engineDetail")
 
         self.engine_flow = QLabel(
             "ANALYSE  →  PLAN  →  EXÉCUTION  →  ÉCRITURE  →  VALIDATION  →  README"
         )
         self.engine_flow.setObjectName("engineFlow")
-        self.engine_flow.setAlignment(Qt.AlignCenter)
+
+        engine_text.addWidget(self.engine_status)
+        engine_text.addWidget(self.engine_detail)
+        engine_text.addWidget(self.engine_flow)
 
         self.engine_progress = QProgressBar()
         self.engine_progress.setObjectName("engineProgress")
         self.engine_progress.setRange(0, 100)
         self.engine_progress.setValue(0)
         self.engine_progress.setTextVisible(False)
-        self.engine_progress.setMaximumWidth(220)
+        self.engine_progress.setMaximumWidth(180)
 
         self.btn_reopen_panel = QPushButton("▶  PANNEAU")
         self.btn_reopen_panel.setObjectName("reopenPanelButton")
         self.btn_reopen_panel.setMaximumWidth(130)
         self.btn_reopen_panel.clicked.connect(self._reopen_right_panel)
 
-        engine_layout.addWidget(self.engine_status)
-        engine_layout.addWidget(self.engine_flow, 1)
+        engine_layout.addWidget(self.reflexion_avatar)
+        engine_layout.addLayout(engine_text, 1)
         engine_layout.addWidget(self.engine_progress)
         engine_layout.addWidget(self.btn_reopen_panel)
         root_layout.addWidget(engine_panel)
@@ -683,6 +719,28 @@ class TiLexCodexWindow(QMainWindow):
                 border-radius: 8px;
             }
 
+            #enginePanel {
+                background: #000000;
+                border: 2px solid #39ff14;
+                border-radius: 10px;
+            }
+
+            #reflexionAvatar {
+                background: #000000;
+                color: #ff8a00;
+                border: 2px solid #ff8a00;
+                border-radius: 10px;
+                padding: 2px;
+                font-size: 34px;
+                font-weight: 900;
+            }
+
+            #engineDetail {
+                color: #dfffaa;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
             #engineStatus {
                 color: #ff9d21;
                 font-weight: 900;
@@ -1028,13 +1086,16 @@ class TiLexCodexWindow(QMainWindow):
 
     def _set_engine_stage(self, stage: str, detail: str = "", progress: int = 0):
         stage = stage.upper().strip()
-        text = f"MOTEUR CODEX  •  {stage}"
-        if detail:
-            text += f"  •  {detail}"
+        text = f"MOTEUR DE RÉFLEXION  •  {stage}"
         self.engine_stage_text = text
+
         if hasattr(self, "engine_status"):
             prefix = self.thinking_frames[self.thinking_index] if self.thinking_timer.isActive() else "●"
             self.engine_status.setText(f"{prefix} {text}")
+
+        if hasattr(self, "engine_detail"):
+            self.engine_detail.setText(detail or "Traitement en cours…")
+
         if hasattr(self, "engine_progress"):
             self.engine_progress.setValue(max(0, min(100, progress)))
 
