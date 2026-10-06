@@ -874,17 +874,19 @@ class CodexLocalApp(App):
             self._listed_paths.add(str(rel).replace("\\", "/"))
 
     def on_list_view_selected(self, event):
-        self.action_save_file()
-        p = getattr(event.item, "path", None)
-        if p and p.is_file():
+        try:
+            self.action_save_file()
+            p = getattr(event.item, "path", None)
+            if not p or not p.is_file():
+                return
             self.current_path = p
-            self.secondary_path = None
-            self.query_one("#pane2").display = False
             self._set_editor_language(p, "#editor")
             self.query_one("#editor", TextArea).text = p.read_text(encoding="utf-8", errors="replace")
             self.query_one("#file1_title", Static).update("📄 " + str(p.relative_to(self.root)))
             self.query_one("#editor_title", Static).update("CODEX • ÉCRITURE / GÉNÉRATION")
             self.query_one("#editor", TextArea).focus()
+        except Exception as exc:
+            self.notify("Erreur ouverture fichier : " + str(exc), severity="error", timeout=10)
 
     def action_save_file(self):
         saved = []
