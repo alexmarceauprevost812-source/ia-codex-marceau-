@@ -696,9 +696,12 @@ CONTRAT OBLIGATOIRE:
         if not content:
             raise ValueError("DIRECT: Qwen a retourné une réponse vide.")
 
-        valid, error = self._validate_generated_content(target, content)
-        if not valid:
-            raise ValueError(f"DIRECT: code refusé avant sauvegarde: {error}")
+        content = self._repair_until_valid(
+            target,
+            request,
+            content,
+            max_repairs=2,
+        )
 
         # Protection anti-miniature: une modification ne doit pas écraser un vrai
         # fichier par quelques lignes sans demande explicite.
@@ -822,6 +825,24 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
         self._backup([rel for rel, _ in valid])
         changed = []
         for rel, content in valid:
+            valid_content, validation_error = self._validate_generated_content(rel, content)
+            if not valid_content:
+                raise ValueError(
+                    f"Validation finale refusée pour {rel}: {validation_error}. "
+                    "Le fichier original est conservé."
+                )
+
+            # Deuxième garde Python: compile le contenu sans l'exécuter.
+            if Path(rel).suffix.lower() == ".py":
+                try:
+                    compile(content, rel, "exec")
+                except SyntaxError as exc:
+                    raise ValueError(
+                        f"Compilation Python refusée pour {rel}: "
+                        f"ligne {exc.lineno}: {exc.msg}. "
+                        "Le fichier original est conservé."
+                    ) from exc
+
             target = self._safe(rel)
             target.parent.mkdir(parents=True, exist_ok=True)
             old = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
