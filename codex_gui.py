@@ -309,13 +309,20 @@ class CodexWorker(QObject):
                 model=self.model,
                 status=lambda msg: self.status.emit(str(msg)),
             )
-            result = engine.build(self.request)
+            if self.request.strip().lower().startswith("/chat"):
+                result = engine.chat(self.request)
+                chat_mode = True
+            else:
+                result = engine.build(self.request)
+                chat_mode = False
+
             self.finished.emit((
                 result,
                 {
                     "outputs": dict(engine.last_outputs),
                     "stats": dict(engine.last_stats_by_file),
                     "diffs": dict(engine.last_diffs),
+                    "chat_mode": chat_mode,
                 },
             ))
         except BaseException as exc:
@@ -751,11 +758,11 @@ class TiLexCodexWindow(QMainWindow):
 
         prompt_box = QVBoxLayout()
         prompt_box.setSpacing(4)
-        prompt_title = QLabel("💬  Commande Codex")
+        prompt_title = QLabel("💬  Commande Codex / Chat IA")
         prompt_title.setObjectName("sectionTitle")
         self.prompt = QLineEdit()
         self.prompt.setObjectName("prompt")
-        self.prompt.setPlaceholderText("Ex : ajoute une fonction de validation dans config.py")
+        self.prompt.setPlaceholderText("Ex : /chat explique ce projet  •  ou demande une modification de code")
         self.prompt.returnPressed.connect(self.send_codex)
         prompt_box.addWidget(prompt_title)
         prompt_box.addWidget(self.prompt)
@@ -2224,14 +2231,19 @@ class TiLexCodexWindow(QMainWindow):
                 return
 
             self.last_codex_request = request
-            self._set_engine_stage("ANALYSE", "compréhension de la commande", 10)
+            is_chat = request.lower().startswith("/chat")
+            if is_chat:
+                self._set_engine_stage("CHAT IA", "préparation de la réponse", 15)
+            else:
+                self._set_engine_stage("ANALYSE", "compréhension de la commande", 10)
             self._start_thinking_animation()
 
             mode = self.mode_combo.currentText()
-            if mode == "PRO":
-                request = "/pro " + request
-            elif mode == "DIRECT":
-                request = "/fast " + request
+            if not is_chat:
+                if mode == "PRO":
+                    request = "/pro " + request
+                elif mode == "DIRECT":
+                    request = "/fast " + request
 
             self.prompt.clear()
             self.prompt.setEnabled(False)
@@ -2309,6 +2321,15 @@ class TiLexCodexWindow(QMainWindow):
                 self._stop_thinking_animation()
                 self._log(result.message, "ERROR")
                 QMessageBox.critical(self, "Erreur CODEX", result.message)
+                self.prompt.setFocus()
+                return
+
+            chat_mode = bool(run_data.get("chat_mode")) if isinstance(run_data, dict) else False
+            if chat_mode or str((result.plan or {}).get("mode", "")).upper() == "CHAT":
+                self._log("IA : " + result.message, "CHAT")
+                self._set_engine_stage("CHAT IA", "réponse terminée", 100)
+                self._stop_thinking_animation()
+                self._show_right_panel(0)
                 self.prompt.setFocus()
                 return
 
