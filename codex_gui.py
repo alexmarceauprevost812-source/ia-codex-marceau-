@@ -146,39 +146,52 @@ class TiLexCodexWindow(QMainWindow):
     def _build_ui(self):
         root = QWidget()
         root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(10, 10, 10, 10)
-        root_layout.setSpacing(8)
+        root_layout.setContentsMargins(8, 8, 8, 8)
+        root_layout.setSpacing(7)
 
+        # ===== HEADER =====
         header = QFrame(objectName="header")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 10, 18, 10)
-
-        brand = QLabel("◢  TI-LEX CODEX")
-        brand.setObjectName("brand")
-        subtitle = QLabel("IA Codex Marceau")
-        subtitle.setObjectName("subtitle")
+        header_layout.setSpacing(14)
 
         brand_box = QVBoxLayout()
         brand_box.setSpacing(0)
+        brand = QLabel("▲  TI-LEX CODEX")
+        brand.setObjectName("brand")
+        subtitle = QLabel("IA Codex Marceau")
+        subtitle.setObjectName("subtitle")
         brand_box.addWidget(brand)
         brand_box.addWidget(subtitle)
 
         header_layout.addLayout(brand_box)
-        header_layout.addStretch()
+        header_layout.addStretch(1)
+
+        header_nav = QLabel("Développer   •   Analyser   •   Automatiser   •   Sans limites")
+        header_nav.setObjectName("headerNav")
+        header_nav.setAlignment(Qt.AlignCenter)
+        header_layout.addWidget(header_nav, 2)
+
+        header_layout.addStretch(1)
 
         self.ollama_label = QLabel("● Ollama : vérification…")
         self.ollama_label.setObjectName("ollama")
+        self.ollama_label.setMinimumWidth(240)
         header_layout.addWidget(self.ollama_label)
 
         root_layout.addWidget(header)
 
+        # ===== MAIN AREA =====
         main_splitter = QSplitter(Qt.Horizontal)
         main_splitter.setChildrenCollapsible(False)
+        main_splitter.setHandleWidth(4)
 
-        # LEFT: project explorer
+        # LEFT
         left = QFrame(objectName="panel")
         left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setContentsMargins(8, 8, 8, 8)
+        left_layout.setSpacing(7)
+
         left_title = QLabel("📁  PROJET")
         left_title.setObjectName("sectionTitle")
         left_layout.addWidget(left_title)
@@ -189,11 +202,13 @@ class TiLexCodexWindow(QMainWindow):
         self.tree.itemDoubleClicked.connect(self._open_tree_item)
         left_layout.addWidget(self.tree, 1)
 
-        new_project = QPushButton("➕  Nouveau projet")
-        new_project.clicked.connect(self.new_project)
-        left_layout.addWidget(new_project)
+        self.btn_new = QPushButton("＋  Nouveau projet")
+        self.btn_new.setObjectName("newProjectButton")
+        self.btn_new.clicked.connect(self.new_project)
+        left_layout.addWidget(self.btn_new)
 
         open_project = QPushButton("📂  Ouvrir projet")
+        open_project.setObjectName("openProjectButton")
         open_project.clicked.connect(self.open_project)
         left_layout.addWidget(open_project)
 
@@ -202,11 +217,45 @@ class TiLexCodexWindow(QMainWindow):
         self.project_label.setObjectName("muted")
         left_layout.addWidget(self.project_label)
 
-        # CENTER: editor
+        # Decorative TI-LEX card, matching the approved mockup
+        info_card = QFrame(objectName="infoCard")
+        info_layout = QVBoxLayout(info_card)
+        info_layout.setContentsMargins(14, 14, 14, 14)
+        info_layout.setSpacing(8)
+
+        logo = QLabel("▲")
+        logo.setObjectName("cardLogo")
+        logo.setAlignment(Qt.AlignCenter)
+
+        card_title = QLabel("IA CODEX\nMARCEAU")
+        card_title.setObjectName("cardTitle")
+        card_title.setAlignment(Qt.AlignCenter)
+
+        card_text = QLabel("COMPRENDRE\nDÉVELOPPER\nOPTIMISER\nAUTOMATISER")
+        card_text.setObjectName("cardText")
+        card_text.setAlignment(Qt.AlignCenter)
+
+        card_footer = QLabel("Noir + vert lime + orange")
+        card_footer.setObjectName("cardFooter")
+        card_footer.setAlignment(Qt.AlignCenter)
+
+        version = QLabel("///                                      v1.0.0")
+        version.setObjectName("versionLabel")
+
+        info_layout.addWidget(logo)
+        info_layout.addWidget(card_title)
+        info_layout.addWidget(card_text)
+        info_layout.addStretch()
+        info_layout.addWidget(card_footer)
+        info_layout.addWidget(version)
+
+        left_layout.addWidget(info_card)
+
+        # CENTER
         center = QFrame(objectName="panel")
         center_layout = QVBoxLayout(center)
-        center_layout.setContentsMargins(8, 8, 8, 8)
-        center_layout.setSpacing(6)
+        center_layout.setContentsMargins(7, 7, 7, 7)
+        center_layout.setSpacing(5)
 
         self.file_title = QLabel("📄 Aucun fichier ouvert")
         self.file_title.setObjectName("tabTitle")
@@ -222,27 +271,26 @@ class TiLexCodexWindow(QMainWindow):
         self.highlighter = PythonHighlighter(self.editor.document())
         center_layout.addWidget(self.editor, 1)
 
-        # RIGHT: tools + output
+        # RIGHT
         right = QFrame(objectName="panel")
         right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(10, 10, 10, 10)
-        right_layout.setSpacing(8)
+        right_layout.setContentsMargins(8, 8, 8, 8)
+        right_layout.setSpacing(7)
 
         tools_title = QLabel("🔧  OUTILS")
         tools_title.setObjectName("sectionTitle")
         right_layout.addWidget(tools_title)
 
-        self.btn_run = self._tool_button("▶  Lancer", self.run_current)
-        self.btn_save = self._tool_button("💾  Sauvegarder", self.save_current)
-        self.btn_test = self._tool_button("🧪  Tester", self.test_current)
-        self.btn_build = self._tool_button("⬢  Build", self.build_current)
-        self.btn_new = self._tool_button("➕  Nouveau projet", self.new_project)
-        self.btn_open = self._tool_button("📂  Ouvrir projet", self.open_project)
-        self.btn_zip = self._tool_button("🗜  Créer ZIP", self.create_zip)
+        self.btn_run = self._tool_button("▶  Lancer                         F5", self.run_current)
+        self.btn_save = self._tool_button("💾  Sauvegarder              Ctrl+S", self.save_current)
+        self.btn_test = self._tool_button("🧪  Tester                       Ctrl+T", self.test_current)
+        self.btn_build = self._tool_button("⬢  Build                        Ctrl+B", self.build_current)
+        self.btn_open = self._tool_button("📂  Ouvrir projet             Ctrl+O", self.open_project)
+        self.btn_zip = self._tool_button("🗜  Créer ZIP                  Ctrl+Z", self.create_zip)
 
         for btn in (
-            self.btn_run, self.btn_save, self.btn_test, self.btn_build,
-            self.btn_new, self.btn_open, self.btn_zip
+            self.btn_run, self.btn_save, self.btn_test,
+            self.btn_build, self.btn_open, self.btn_zip
         ):
             right_layout.addWidget(btn)
 
@@ -258,6 +306,7 @@ class TiLexCodexWindow(QMainWindow):
         right_layout.addWidget(self.output, 1)
 
         clear_btn = QPushButton("🗑  Effacer")
+        clear_btn.setObjectName("clearButton")
         clear_btn.clicked.connect(self.output.clear)
         right_layout.addWidget(clear_btn)
 
@@ -267,30 +316,33 @@ class TiLexCodexWindow(QMainWindow):
         main_splitter.setStretchFactor(0, 2)
         main_splitter.setStretchFactor(1, 7)
         main_splitter.setStretchFactor(2, 3)
-        main_splitter.setSizes([300, 900, 360])
+        main_splitter.setSizes([330, 930, 390])
 
         root_layout.addWidget(main_splitter, 1)
 
-        # BOTTOM command bar
+        # ===== BOTTOM COMMAND BAR =====
         bottom = QFrame(objectName="commandBar")
         bottom_layout = QHBoxLayout(bottom)
-        bottom_layout.setContentsMargins(12, 8, 12, 8)
+        bottom_layout.setContentsMargins(10, 7, 10, 7)
+        bottom_layout.setSpacing(9)
 
         prompt_box = QVBoxLayout()
+        prompt_box.setSpacing(4)
         prompt_title = QLabel("💬  Commande Codex")
         prompt_title.setObjectName("sectionTitle")
         self.prompt = QLineEdit()
         self.prompt.setObjectName("prompt")
-        self.prompt.setPlaceholderText("Ex: ajoute une fonction de validation dans config.py")
+        self.prompt.setPlaceholderText("Ex : ajoute une fonction de validation dans config.py")
         self.prompt.returnPressed.connect(self.send_codex)
         prompt_box.addWidget(prompt_title)
         prompt_box.addWidget(self.prompt)
 
-        send = QPushButton("➤  Envoyer")
+        send = QPushButton("➤  Envoyer\nCtrl+Entrée")
         send.setObjectName("sendButton")
         send.clicked.connect(self.send_codex)
 
         mode_box = QVBoxLayout()
+        mode_box.setSpacing(4)
         mode_title = QLabel("⚙  MODE ACTIF")
         mode_title.setObjectName("sectionTitle")
         self.mode_combo = QComboBox()
@@ -308,6 +360,7 @@ class TiLexCodexWindow(QMainWindow):
         self.btn_save.setShortcut(QKeySequence("Ctrl+S"))
         self.btn_run.setShortcut(QKeySequence("F5"))
         self.btn_test.setShortcut(QKeySequence("Ctrl+T"))
+        self.btn_build.setShortcut(QKeySequence("Ctrl+B"))
         self.btn_open.setShortcut(QKeySequence("Ctrl+O"))
 
     def _tool_button(self, text: str, callback):
@@ -320,8 +373,8 @@ class TiLexCodexWindow(QMainWindow):
     def _apply_theme(self):
         self.setStyleSheet("""
             QMainWindow, QWidget {
-                background: #010303;
-                color: #f4ffff;
+                background: #010404;
+                color: #efffff;
                 font-family: "Segoe UI";
                 font-size: 14px;
             }
@@ -329,110 +382,184 @@ class TiLexCodexWindow(QMainWindow):
             #header {
                 background: qlineargradient(
                     x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #061111,
+                    stop:0 #041010,
                     stop:0.50 #020707,
-                    stop:1 #100900
+                    stop:1 #061008
                 );
-                border: 2px solid #ff7a00;
-                border-radius: 12px;
+                border: 1px solid #00e6d2;
+                border-top: 2px solid #ff8200;
+                border-radius: 10px;
             }
 
             #panel, #commandBar {
                 background: qlineargradient(
                     x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #061010,
+                    stop:0 #061011,
                     stop:1 #020606
                 );
-                border: 1px solid #00d6c9;
-                border-radius: 11px;
+                border: 1px solid #00d9cc;
+                border-radius: 9px;
             }
 
             #brand {
-                color: #ff7a00;
-                font-size: 32px;
+                color: #f4ffff;
+                font-size: 30px;
                 font-weight: 900;
-                letter-spacing: 2px;
-                padding: 2px;
+                letter-spacing: 1px;
             }
 
             #subtitle {
-                color: #39ff14;
+                color: #6dffc8;
                 font-size: 16px;
-                font-weight: 700;
-                letter-spacing: 1px;
+                font-weight: 600;
+            }
+
+            #headerNav {
+                color: #d6eeee;
+                font-size: 13px;
+                letter-spacing: 0.5px;
             }
 
             #ollama {
                 color: #39ff14;
                 font-family: "Cascadia Code";
                 font-weight: 800;
-                padding: 9px 13px;
-                border: 2px solid #39ff14;
-                border-radius: 9px;
-                background: #021006;
+                padding: 8px 12px;
+                border: 1px solid #00d9cc;
+                border-radius: 8px;
+                background: #03100b;
             }
 
             #sectionTitle {
-                color: #39ff14;
+                color: #8eff55;
                 font-weight: 900;
                 font-size: 15px;
-                letter-spacing: 1px;
+                letter-spacing: 0.5px;
             }
 
             #tabTitle {
-                color: #00f7ff;
-                background: #041010;
-                border: 1px solid #00a8a8;
-                border-bottom: 3px solid #ff7a00;
+                color: #a9ff5a;
+                background: #071010;
+                border: 1px solid #00d9cc;
+                border-bottom: 2px solid #39ff14;
                 border-radius: 7px;
-                padding: 9px 12px;
+                padding: 7px 11px;
                 font-family: "Cascadia Code";
                 font-weight: 800;
             }
 
             #projectTree {
-                background: #010505;
-                border: 1px solid #00d6c9;
-                border-radius: 8px;
-                color: #eaffff;
+                background: #010606;
+                border: 1px solid #00d9cc;
+                border-radius: 7px;
+                color: #f0ffff;
                 outline: 0;
             }
 
             #projectTree::item {
-                min-height: 29px;
-                padding-left: 5px;
+                min-height: 26px;
+                padding-left: 4px;
             }
 
             #projectTree::item:hover {
-                background: #07201a;
-                color: #39ff14;
+                background: #0a2019;
+                color: #8eff55;
             }
 
             #projectTree::item:selected {
-                background: #321a00;
+                background: #234b0b;
+                color: #dfff9a;
+                border: 1px solid #39ff14;
+            }
+
+            #newProjectButton {
+                background: #061607;
+                color: #8eff55;
+                border: 2px solid #39ff14;
+                border-radius: 8px;
+                padding: 8px;
+                font-weight: 900;
+            }
+
+            #newProjectButton:hover {
+                background: #103b10;
+            }
+
+            #openProjectButton {
+                background: #231300;
                 color: #ffb347;
-                border: 1px solid #ff7a00;
+                border: 2px solid #ff8200;
+                border-radius: 8px;
+                padding: 8px;
+                font-weight: 900;
+            }
+
+            #openProjectButton:hover {
+                background: #4a2500;
+            }
+
+            #infoCard {
+                min-height: 240px;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #030a08,
+                    stop:1 #07180d
+                );
+                border: 1px solid #00d9cc;
+                border-radius: 8px;
+            }
+
+            #cardLogo {
+                color: #7dff38;
+                font-size: 54px;
+                font-weight: 900;
+            }
+
+            #cardTitle {
+                color: #f2ffff;
+                font-size: 20px;
+                font-weight: 900;
+                letter-spacing: 1px;
+            }
+
+            #cardText {
+                color: #d5eeee;
+                font-size: 12px;
+                letter-spacing: 2px;
+            }
+
+            #cardFooter {
+                color: #b8ff55;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            #versionLabel {
+                color: #8eff55;
+                font-family: "Cascadia Code";
+                font-weight: 900;
+                font-size: 12px;
             }
 
             #editor {
-                background: #010404;
-                color: #eaffff;
-                border: 2px solid #0ca8a8;
-                border-radius: 8px;
-                selection-background-color: #234d20;
+                background: #010507;
+                color: #efffff;
+                border: 1px solid #00d9cc;
+                border-radius: 7px;
+                selection-background-color: #214f25;
                 selection-color: #ffffff;
-                padding: 10px;
+                padding: 8px;
             }
 
             #editor:focus {
-                border: 2px solid #39ff14;
+                border: 1px solid #39ff14;
             }
 
             #output {
-                background: #010404;
-                color: #bdfcff;
-                border: 1px solid #00a8a8;
-                border-radius: 8px;
+                background: #010507;
+                color: #dbffff;
+                border: 1px solid #00d9cc;
+                border-radius: 7px;
                 font-family: "Cascadia Code";
                 font-size: 12px;
             }
@@ -440,86 +567,94 @@ class TiLexCodexWindow(QMainWindow):
             #toolButton {
                 background: qlineargradient(
                     x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #2b1200,
-                    stop:1 #120700
+                    stop:0 #351700,
+                    stop:1 #1d0d00
                 );
-                color: #ff9d1f;
+                color: #ffad24;
                 border: 2px solid #ff7a00;
-                border-radius: 9px;
-                font-size: 16px;
+                border-radius: 8px;
+                font-size: 15px;
                 font-weight: 900;
                 text-align: left;
-                padding: 9px 14px;
+                padding: 9px 12px;
             }
 
             #toolButton:hover {
-                background: #4a2100;
-                color: #ffe0a3;
-                border: 2px solid #ffb000;
+                background: #4b2400;
+                color: #ffe0a0;
+                border-color: #ffb000;
             }
 
             #toolButton:pressed {
-                background: #6e2e00;
+                background: #6f3100;
                 color: white;
+            }
+
+            #clearButton {
+                background: #061111;
+                color: #eaffff;
+                border: 1px solid #00d9cc;
+                border-radius: 7px;
+                padding: 7px;
+                font-weight: 700;
             }
 
             QPushButton {
                 background: #061111;
-                color: #eaffff;
-                border: 1px solid #00a8a8;
-                border-radius: 8px;
-                padding: 8px 12px;
+                color: #efffff;
+                border: 1px solid #00bfb5;
+                border-radius: 7px;
+                padding: 7px 10px;
                 font-weight: 700;
             }
 
             QPushButton:hover {
-                background: #08211d;
-                border: 1px solid #39ff14;
-                color: #39ff14;
+                color: #8eff55;
+                border-color: #39ff14;
             }
 
             #sendButton {
-                min-width: 175px;
-                min-height: 56px;
+                min-width: 180px;
+                min-height: 55px;
                 background: qlineargradient(
                     x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #ff5a00,
-                    stop:1 #ff9d00
+                    stop:0 #ff7900,
+                    stop:1 #ffb000
                 );
-                color: #0a0500;
-                border: 2px solid #ffc247;
-                border-radius: 9px;
-                font-size: 17px;
+                color: #120800;
+                border: 2px solid #ffc246;
+                border-radius: 8px;
+                font-size: 16px;
                 font-weight: 900;
             }
 
             #sendButton:hover {
-                background: #ffb000;
-                border: 2px solid #fff18a;
+                background: #ffc02a;
+                border-color: #fff18a;
             }
 
             #prompt, QComboBox {
-                background: #010404;
+                background: #010505;
                 color: #ffffff;
                 border: 2px solid #39ff14;
-                border-radius: 8px;
-                padding: 9px 11px;
-                min-height: 30px;
+                border-radius: 7px;
+                padding: 8px 10px;
+                min-height: 28px;
                 font-family: "Cascadia Code";
             }
 
             #prompt:focus, QComboBox:focus {
-                border: 2px solid #00f7ff;
+                border-color: #00efff;
             }
 
             #muted {
-                color: #7cbaba;
-                font-size: 11px;
+                color: #76a9a9;
+                font-size: 10px;
             }
 
             QSplitter::handle {
-                background: #073232;
-                width: 5px;
+                background: #07302e;
+                width: 4px;
             }
 
             QSplitter::handle:hover {
@@ -528,18 +663,18 @@ class TiLexCodexWindow(QMainWindow):
 
             QScrollBar:vertical {
                 background: #031010;
-                width: 12px;
+                width: 11px;
                 border: 0;
             }
 
             QScrollBar::handle:vertical {
                 background: #39ff14;
-                min-height: 30px;
+                min-height: 28px;
                 border-radius: 5px;
             }
 
             QScrollBar::handle:vertical:hover {
-                background: #00f7ff;
+                background: #00efff;
             }
 
             QToolTip {
