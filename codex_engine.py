@@ -30,7 +30,7 @@ class CodexResult:
 class CodexEngine:
     """Planifie et applique un projet par lots pour rester utilisable avec un LLM local."""
 
-    def __init__(self, root: Path, model: str = "qwen2.5-coder:7b",
+    def __init__(self, root: Path, model: str = "qwen2.5:7b",
                  endpoint: str = "http://127.0.0.1:11434",
                  status: Callable[[str], None] | None = None):
         self.root = Path(root).resolve()
@@ -53,6 +53,38 @@ class CodexEngine:
             raise ValueError(f"Chemin refusé: {rel}")
         return p
 
+    def _resolve_model(self) -> str:
+        """Choisit un modèle Ollama réellement installé, avec repli automatique."""
+        try:
+            response = requests.get(self.endpoint + "/api/tags", timeout=(2, 4))
+            response.raise_for_status()
+            models = [
+                item.get("name", "").strip()
+                for item in response.json().get("models", [])
+                if item.get("name")
+            ]
+        except Exception:
+            return self.model
+
+        if not models or self.model in models:
+            return self.model
+
+        preferred = [
+            "qwen2.5:7b",
+            "qwen2.5-coder:7b",
+            "mistral:latest",
+            "mistral",
+        ]
+        for candidate in preferred:
+            if candidate in models:
+                self.status(f"Modèle {self.model} absent -> utilisation de {candidate}")
+                self.model = candidate
+                return self.model
+
+        self.status(f"Modèle {self.model} absent -> utilisation de {models[0]}")
+        self.model = models[0]
+        return self.model
+
     def _ask(
         self,
         prompt: str,
@@ -67,8 +99,10 @@ class CodexEngine:
         if read_timeout is None:
             read_timeout = 60 if json_mode else 150
 
+        active_model = self._resolve_model()
+
         payload = {
-            "model": self.model,
+            "model": active_model,
             "prompt": prompt,
             "stream": False,
             "keep_alive": "15m",
@@ -86,8 +120,21 @@ class CodexEngine:
             json=payload,
             timeout=(5, read_timeout),
         )
-        response.raise_for_status()
-        return response.json().get("response", "").strip()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = response.text.strip()
+            raise RuntimeError(
+                f"Ollama HTTP {response.status_code} avec le modèle {active_model}: {body or exc}"
+            ) from exc
+
+        data = response.json()
+        if data.get("error"):
+            raise RuntimeError(f"Ollama ({active_model}): {data['error']}")
+        answer = data.get("response", "").strip()
+        if not answer:
+            raise RuntimeError(f"Ollama ({active_model}) a retourné une réponse vide.")
+        return answer
 
     @staticmethod
     def _json(text: str):
