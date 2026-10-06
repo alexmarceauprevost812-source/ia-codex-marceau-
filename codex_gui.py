@@ -56,12 +56,12 @@ class PythonHighlighter(QSyntaxHighlighter):
 
         import re
 
-        keyword = fmt("#ff8a00", True)
-        builtin = fmt("#00e5ff")
-        string = fmt("#9cff57")
+        keyword = fmt("#ff7a00", True)
+        builtin = fmt("#00f7ff")
+        string = fmt("#39ff14")
         comment = fmt("#6b7280")
-        number = fmt("#ffd166")
-        decorator = fmt("#ff4d8d")
+        number = fmt("#ffe600")
+        decorator = fmt("#ff2bd6")
 
         keywords = (
             "False None True and as assert async await break class continue def del elif else "
@@ -300,144 +300,232 @@ class TiLexCodexWindow(QMainWindow):
     def _apply_theme(self):
         self.setStyleSheet("""
             QMainWindow, QWidget {
-                background: #030707;
-                color: #f5f7f8;
+                background: #010303;
+                color: #f4ffff;
                 font-family: "Segoe UI";
                 font-size: 14px;
             }
-            #header, #panel, #commandBar {
-                background: #071010;
-                border: 1px solid #163737;
-                border-radius: 9px;
+
+            #header {
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #061111,
+                    stop:0.50 #020707,
+                    stop:1 #100900
+                );
+                border: 2px solid #ff7a00;
+                border-radius: 12px;
             }
+
+            #panel, #commandBar {
+                background: qlineargradient(
+                    x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #061010,
+                    stop:1 #020606
+                );
+                border: 1px solid #00d6c9;
+                border-radius: 11px;
+            }
+
             #brand {
-                color: #ff8a00;
-                font-size: 30px;
-                font-weight: 800;
-                letter-spacing: 1px;
+                color: #ff7a00;
+                font-size: 32px;
+                font-weight: 900;
+                letter-spacing: 2px;
+                padding: 2px;
             }
+
             #subtitle {
                 color: #39ff14;
                 font-size: 16px;
+                font-weight: 700;
+                letter-spacing: 1px;
             }
+
             #ollama {
                 color: #39ff14;
                 font-family: "Cascadia Code";
-                font-weight: 700;
-                padding: 8px 12px;
-                border: 1px solid #00a86b;
-                border-radius: 8px;
-                background: #04110d;
-            }
-            #sectionTitle {
-                color: #9cff57;
                 font-weight: 800;
+                padding: 9px 13px;
+                border: 2px solid #39ff14;
+                border-radius: 9px;
+                background: #021006;
+            }
+
+            #sectionTitle {
+                color: #39ff14;
+                font-weight: 900;
                 font-size: 15px;
+                letter-spacing: 1px;
             }
+
             #tabTitle {
-                color: #9cff57;
-                background: #071313;
-                border-bottom: 2px solid #ff8a00;
-                padding: 8px 12px;
+                color: #00f7ff;
+                background: #041010;
+                border: 1px solid #00a8a8;
+                border-bottom: 3px solid #ff7a00;
+                border-radius: 7px;
+                padding: 9px 12px;
                 font-family: "Cascadia Code";
-                font-weight: 700;
+                font-weight: 800;
             }
+
             #projectTree {
-                background: #050909;
-                border: 1px solid #163737;
-                border-radius: 6px;
-                color: #eaf2f2;
+                background: #010505;
+                border: 1px solid #00d6c9;
+                border-radius: 8px;
+                color: #eaffff;
                 outline: 0;
             }
+
             #projectTree::item {
-                min-height: 27px;
-                padding-left: 4px;
+                min-height: 29px;
+                padding-left: 5px;
             }
+
+            #projectTree::item:hover {
+                background: #07201a;
+                color: #39ff14;
+            }
+
             #projectTree::item:selected {
-                background: #442400;
+                background: #321a00;
                 color: #ffb347;
-                border: 1px solid #ff8a00;
+                border: 1px solid #ff7a00;
             }
+
             #editor {
-                background: #020606;
-                color: #e8f1f2;
-                border: 1px solid #173333;
+                background: #010404;
+                color: #eaffff;
+                border: 2px solid #0ca8a8;
+                border-radius: 8px;
                 selection-background-color: #234d20;
-                padding: 8px;
+                selection-color: #ffffff;
+                padding: 10px;
             }
+
+            #editor:focus {
+                border: 2px solid #39ff14;
+            }
+
             #output {
-                background: #020606;
-                color: #d9e6e6;
-                border: 1px solid #173333;
+                background: #010404;
+                color: #bdfcff;
+                border: 1px solid #00a8a8;
+                border-radius: 8px;
                 font-family: "Cascadia Code";
                 font-size: 12px;
             }
+
             #toolButton {
-                background: #2a1400;
-                color: #ffae42;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2b1200,
+                    stop:1 #120700
+                );
+                color: #ff9d1f;
                 border: 2px solid #ff7a00;
-                border-radius: 8px;
+                border-radius: 9px;
                 font-size: 16px;
-                font-weight: 800;
+                font-weight: 900;
                 text-align: left;
-                padding: 8px 14px;
+                padding: 9px 14px;
             }
+
             #toolButton:hover {
-                background: #4a2400;
-                color: #ffd08a;
-                border-color: #ffb000;
+                background: #4a2100;
+                color: #ffe0a3;
+                border: 2px solid #ffb000;
             }
+
             #toolButton:pressed {
-                background: #6b3200;
+                background: #6e2e00;
+                color: white;
             }
+
             QPushButton {
-                background: #0b1515;
-                color: #f7f7f7;
-                border: 1px solid #335555;
-                border-radius: 7px;
+                background: #061111;
+                color: #eaffff;
+                border: 1px solid #00a8a8;
+                border-radius: 8px;
                 padding: 8px 12px;
+                font-weight: 700;
             }
+
             QPushButton:hover {
-                border-color: #39ff14;
-                color: #9cff57;
+                background: #08211d;
+                border: 1px solid #39ff14;
+                color: #39ff14;
             }
+
             #sendButton {
-                min-width: 170px;
-                min-height: 54px;
-                background: #ff7a00;
-                color: #120900;
-                border: 1px solid #ffb000;
+                min-width: 175px;
+                min-height: 56px;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #ff5a00,
+                    stop:1 #ff9d00
+                );
+                color: #0a0500;
+                border: 2px solid #ffc247;
+                border-radius: 9px;
                 font-size: 17px;
                 font-weight: 900;
             }
+
             #sendButton:hover {
-                background: #ff9a1f;
+                background: #ffb000;
+                border: 2px solid #fff18a;
             }
+
             #prompt, QComboBox {
-                background: #020606;
-                color: #f5f7f8;
+                background: #010404;
+                color: #ffffff;
                 border: 2px solid #39ff14;
-                border-radius: 7px;
-                padding: 8px 10px;
-                min-height: 28px;
+                border-radius: 8px;
+                padding: 9px 11px;
+                min-height: 30px;
                 font-family: "Cascadia Code";
             }
+
+            #prompt:focus, QComboBox:focus {
+                border: 2px solid #00f7ff;
+            }
+
             #muted {
-                color: #7f9292;
+                color: #7cbaba;
                 font-size: 11px;
             }
+
             QSplitter::handle {
-                background: #0a1d1d;
-                width: 4px;
+                background: #073232;
+                width: 5px;
             }
+
+            QSplitter::handle:hover {
+                background: #39ff14;
+            }
+
             QScrollBar:vertical {
-                background: #071010;
+                background: #031010;
                 width: 12px;
+                border: 0;
             }
+
             QScrollBar::handle:vertical {
                 background: #39ff14;
                 min-height: 30px;
                 border-radius: 5px;
+            }
+
+            QScrollBar::handle:vertical:hover {
+                background: #00f7ff;
+            }
+
+            QToolTip {
+                background: #020606;
+                color: #39ff14;
+                border: 1px solid #39ff14;
             }
         """)
 
