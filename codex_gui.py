@@ -248,8 +248,8 @@ class TiLexCodexWindow(QMainWindow):
             self.tilex_al_logo.setPixmap(
                 tilex_pixmap.scaled(
                     230, 72,
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
                 )
             )
         else:
