@@ -247,7 +247,7 @@ class TiLexCodexWindow(QMainWindow):
         self.reflexion_avatar = QLabel()
         self.reflexion_avatar.setObjectName("reflexionAvatar")
         self.reflexion_avatar.setAlignment(Qt.AlignCenter)
-        self.reflexion_avatar.setFixedSize(126, 78)
+        self.reflexion_avatar.setFixedSize(220, 140)
 
         demon_candidates = [
             Path(__file__).resolve().parent / "assets" / "reflexion_demon.png",
@@ -261,7 +261,7 @@ class TiLexCodexWindow(QMainWindow):
         if not demon_pixmap.isNull():
             self.reflexion_avatar.setPixmap(
                 demon_pixmap.scaled(
-                    120, 72,
+                    205, 125,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
