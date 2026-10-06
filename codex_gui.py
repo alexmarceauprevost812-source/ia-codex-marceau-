@@ -481,11 +481,19 @@ class TiLexCodexWindow(QMainWindow):
         engine_layout.setContentsMargins(8, 5, 10, 5)
         engine_layout.setSpacing(10)
 
-        # Démon visuel accroché au moteur de réflexion.
+        # TI-LEX-AL bien exposé dans un cadre néon avec de l'espace autour.
+        self.reflexion_avatar_frame = QFrame()
+        self.reflexion_avatar_frame.setObjectName("reflexionAvatarFrame")
+        self.reflexion_avatar_frame.setFixedSize(270, 175)
+
+        avatar_frame_layout = QVBoxLayout(self.reflexion_avatar_frame)
+        avatar_frame_layout.setContentsMargins(16, 14, 16, 14)
+        avatar_frame_layout.setSpacing(0)
+
         self.reflexion_avatar = QLabel()
         self.reflexion_avatar.setObjectName("reflexionAvatar")
-        self.reflexion_avatar.setAlignment(Qt.AlignCenter)
-        self.reflexion_avatar.setFixedSize(175, 110)
+        self.reflexion_avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.reflexion_avatar.setFixedSize(232, 142)
 
         demon_candidates = [
             Path(__file__).resolve().parent / "assets" / "reflexion_demon.png",
@@ -497,23 +505,28 @@ class TiLexCodexWindow(QMainWindow):
                 break
 
         if not demon_pixmap.isNull():
-            # Recadre le centre pour enlever une partie des marges noires
-            # et faire paraître TI-LEX-AL nettement plus gros dans un cadre compact.
-            crop_w = max(1, int(demon_pixmap.width() * 0.72))
-            crop_h = max(1, int(demon_pixmap.height() * 0.78))
+            # Recadrage léger: logo plus gros sans couper les cornes ou le texte.
+            crop_w = max(1, int(demon_pixmap.width() * 0.86))
+            crop_h = max(1, int(demon_pixmap.height() * 0.88))
             crop_x = max(0, (demon_pixmap.width() - crop_w) // 2)
             crop_y = max(0, (demon_pixmap.height() - crop_h) // 2)
             demon_cropped = demon_pixmap.copy(crop_x, crop_y, crop_w, crop_h)
 
             self.reflexion_avatar.setPixmap(
                 demon_cropped.scaled(
-                    166, 101,
+                    222, 132,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
             )
         else:
             self.reflexion_avatar.setText("😈")
+
+        avatar_frame_layout.addWidget(
+            self.reflexion_avatar,
+            0,
+            Qt.AlignmentFlag.AlignCenter,
+        )
 
         engine_text = QVBoxLayout()
         engine_text.setContentsMargins(0, 0, 0, 0)
@@ -550,7 +563,7 @@ class TiLexCodexWindow(QMainWindow):
         self.reflexion_spinner.setObjectName("reflectionSpinner")
         self.reflexion_spinner.set_accent_color(self.neon_accent)
 
-        engine_layout.addWidget(self.reflexion_avatar)
+        engine_layout.addWidget(self.reflexion_avatar_frame)
         engine_layout.addWidget(self.reflexion_spinner, 0, Qt.AlignmentFlag.AlignVCenter)
         engine_layout.addLayout(engine_text, 1)
         engine_layout.addWidget(self.engine_progress)
@@ -950,8 +963,19 @@ class TiLexCodexWindow(QMainWindow):
             #header, #enginePanel, #panel, #commandBar,
             #projectTree, #editor, #output, #diffView,
             #tabTitle, #langBadge, #topStatus, #ollama,
-            #infoCard, #reflexionAvatar {{
+            #infoCard {{
                 background: {panel};
+            }}
+
+            #reflexionAvatarFrame {{
+                background: {panel};
+                border: 2px solid {accent};
+                border-radius: 16px;
+            }}
+
+            #reflexionAvatar {{
+                background: transparent;
+                border: none;
             }}
 
             #editor, #output, #diffView, #projectTree {{
@@ -1172,8 +1196,14 @@ class TiLexCodexWindow(QMainWindow):
                 border-radius: 10px;
             }
 
-            #reflexionAvatar {
+            #reflexionAvatarFrame {
                 background: #000000;
+                border: 2px solid #39ff14;
+                border-radius: 16px;
+            }
+
+            #reflexionAvatar {
+                background: transparent;
                 color: #ff8a00;
                 border: 2px solid #ff8a00;
                 border-radius: 10px;
