@@ -11,7 +11,7 @@ FONTS = [
     "Anonymous Pro", "Mononoki", "Victor Mono", "Iosevka", "Terminus", "MesloLGS NF",
 ]
 
-DEFAULTS = {"font": "JetBrains Mono", "model": "qwen2.5-coder:7b", "stream_delay": 0.008}
+DEFAULTS = {"font": "JetBrains Mono", "model": "qwen2.5:7b", "stream_delay": 0.008}
 
 def load_config():
     APP_DIR.mkdir(parents=True, exist_ok=True)
