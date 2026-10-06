@@ -1111,21 +1111,25 @@ class TiLexCodexWindow(QMainWindow):
             #sendButton {
                 min-width: 180px;
                 min-height: 55px;
-                background: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #ff7900,
-                    stop:1 #ffb000
-                );
-                color: #120800;
-                border: 2px solid #ffc246;
-                border-radius: 8px;
+                background: #1a0900;
+                color: #ff9d21;
+                border: 1px solid #ff7a00;
+                border-radius: 7px;
                 font-size: 16px;
                 font-weight: 900;
+                padding: 8px 16px;
             }
 
             #sendButton:hover {
-                background: #ffc02a;
-                border-color: #fff18a;
+                background: #2a1000;
+                color: #ffb347;
+                border: 1px solid #ff9d21;
+            }
+
+            #sendButton:pressed {
+                background: #3a1600;
+                color: #ffd08a;
+                border: 1px solid #ffb347;
             }
 
             #prompt, QComboBox {
