@@ -233,6 +233,46 @@ class CodexEngine:
                 pass
         return None
 
+    def _execution_mode(self, request: str) -> tuple[str, str]:
+        """Choisit FAST ou PRO sans appel IA. /fast et /pro forcent le mode."""
+        raw = request.strip()
+        lower = raw.lower()
+
+        if lower.startswith("/fast "):
+            return "FAST", raw[6:].strip()
+        if lower == "/fast":
+            return "FAST", ""
+        if lower.startswith("/pro "):
+            return "PRO", raw[5:].strip()
+        if lower == "/pro":
+            return "PRO", ""
+
+        file_pattern = r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|pyw|js|jsx|mjs|cjs|ts|tsx|html?|css|scss|json|md|txt|toml|ya?ml|sql|sh|bash|zsh|ps1|bat|cmd|c|h|cpp|hpp|cc|java|go|rs|php|rb|lua|xml|ini|cfg|env))"
+        explicit = list(dict.fromkeys(re.findall(file_pattern, raw)))
+        if len(explicit) >= 2:
+            return "PRO", raw
+
+        complex_words = (
+            "architecture", "architecte", "refactor", "refactorise", "refactoriser",
+            "plusieurs fichiers", "multi-fichier", "multifichier", "projet complet",
+            "analyse tout le projet", "analyse le projet", "corrige tout le projet",
+            "migration", "intégration complète", "integration complete",
+            "tests d'intégration", "tests integration", "base de données",
+            "database", "api complète", "api complete",
+        )
+        if any(word in lower for word in complex_words):
+            return "PRO", raw
+
+        # Une demande longue avec plusieurs actions est plus sûre en PRO.
+        action_markers = sum(
+            lower.count(word)
+            for word in (" ajoute ", " corrige ", " modifie ", " crée ", " cree ", " puis ", " et ensuite ")
+        )
+        if len(raw) > 420 or action_markers >= 3:
+            return "PRO", raw
+
+        return "FAST", raw
+
     def turbo_task(self, request: str) -> dict | None:
         """Résout localement une commande simple sans appel IA de planification."""
         raw = request.strip()
@@ -245,7 +285,7 @@ class CodexEngine:
         )
         if any(alias in lower for alias in readme_aliases):
             return {
-                "id": "TURBO",
+                "id": "FAST",
                 "goal": request,
                 "files": ["README.md"],
                 "needs": ["README.md"],
@@ -259,7 +299,7 @@ class CodexEngine:
         explicit_files = list(dict.fromkeys(x.replace("\\", "/") for x in matches))[:2]
         if len(explicit_files) == 1:
             rel = explicit_files[0]
-            return {"id": "TURBO", "goal": request, "files": [rel], "needs": [rel]}
+            return {"id": "FAST", "goal": request, "files": [rel], "needs": [rel]}
         if len(explicit_files) >= 2:
             return None
 
@@ -700,21 +740,37 @@ cd ia-codex-marceau-
         try:
             self.last_outputs = {}
             self.last_stats_by_file = {}
-            task = self.turbo_task(request)
-            if task is not None:
-                mode_name = "FAST" if task.get("id") == "FAST" else "TURBO"
-                self.status(f"⚡ MODE {mode_name} • génération directe • plan IA évité")
+
+            mode, clean_request = self._execution_mode(request)
+            request = clean_request
+            if not request:
+                raise ValueError("Commande vide après sélection du mode.")
+
+            self.status(
+                "⚡ MODE FAST • réponse directe" if mode == "FAST"
+                else "🧠 MODE PRO • analyse approfondie"
+            )
+
+            task = self.turbo_task(request) if mode == "FAST" else None
+
+            # Si FAST ne peut pas identifier une cible de façon sûre,
+            # bascule automatiquement en PRO au lieu de deviner un fichier.
+            if mode == "FAST" and task is None:
+                mode = "PRO"
+                self.status("🧠 MODE PRO • cible ambiguë • analyse du projet")
+
+            if mode == "FAST" and task is not None:
                 plan = {
-                    "summary": "Mode turbo sans planification IA",
-                    "architecture": ["1 commande", "1 fichier", "1 appel de génération"],
+                    "summary": "Mode FAST sans planification IA",
+                    "architecture": ["1 commande", "1 fichier", "plan IA évité"],
                     "tasks": [task],
                     "request": request,
                     "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "turbo": True,
+                    "mode": "FAST",
                 }
             else:
-                self.status("🧠 Architecture du projet…")
                 plan = self.make_plan(request)
+                plan["mode"] = "PRO"
             tasks = plan.get("tasks", [])[:2]
             request_lower = request.lower()
             readme_requested = any(alias in request_lower for alias in (
@@ -746,8 +802,13 @@ cd ia-codex-marceau-
             )
             self._remember_run(request, report["changed"], plan)
             self.status("✅ Génération terminée")
-            return CodexResult(True, f"Projet généré: {len(report['changed'])} fichier(s) modifié(s).",
-                               report["changed"], plan)
+            mode_label = str(plan.get("mode") or "PRO")
+            return CodexResult(
+                True,
+                f"MODE {mode_label} • {len(report['changed'])} fichier(s) modifié(s).",
+                report["changed"],
+                plan,
+            )
         except Exception as exc:
             error_report = {
                 "time": time.strftime("%Y-%m-%d %H:%M:%S"),
