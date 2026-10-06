@@ -392,7 +392,7 @@ class TiLexCodexWindow(QMainWindow):
     def _apply_theme(self):
         self.setStyleSheet("""
             QMainWindow, QWidget {
-                background: #010404;
+                background: #000000;
                 color: #efffff;
                 font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 14px;
@@ -400,7 +400,7 @@ class TiLexCodexWindow(QMainWindow):
 
 
             #topStatus {
-                background: #020909;
+                background: #000000;
                 color: #a9ff5a;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
@@ -411,7 +411,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #langBadge {
-                background: #020708;
+                background: #000000;
                 color: #baff64;
                 border: 1px solid #39ff14;
                 border-radius: 7px;
@@ -422,7 +422,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #tilexAlLogo {
-                background: #020505;
+                background: #000000;
                 color: #ff8a00;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
@@ -433,23 +433,14 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #header {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #041010,
-                    stop:0.50 #020707,
-                    stop:1 #061008
-                );
+                background: #000000;
                 border: 1px solid #00e6d2;
                 border-top: 2px solid #ff8200;
                 border-radius: 10px;
             }
 
             #panel, #commandBar {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #061011,
-                    stop:1 #020606
-                );
+                background: #000000;
                 border: 1px solid #00d9cc;
                 border-radius: 9px;
             }
@@ -480,7 +471,7 @@ class TiLexCodexWindow(QMainWindow):
                 padding: 8px 12px;
                 border: 1px solid #00d9cc;
                 border-radius: 8px;
-                background: #03100b;
+                background: #000000;
             }
 
             #sectionTitle {
@@ -492,7 +483,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #tabTitle {
                 color: #a9ff5a;
-                background: #071010;
+                background: #000000;
                 border: 1px solid #00d9cc;
                 border-bottom: 2px solid #39ff14;
                 border-radius: 7px;
@@ -502,7 +493,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #projectTree {
-                background: #010606;
+                background: #000000;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
                 color: #f0ffff;
@@ -554,11 +545,7 @@ class TiLexCodexWindow(QMainWindow):
             #infoCard {
                 min-height: 145px;
                 max-height: 185px;
-                background: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #030a08,
-                    stop:1 #07180d
-                );
+                background: #000000;
                 border: 1px solid #00d9cc;
                 border-radius: 8px;
             }
@@ -596,7 +583,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #editor {
-                background: #010507;
+                background: #000000;
                 color: #efffff;
                 font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 15px;
@@ -613,7 +600,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #output {
-                background: #010507;
+                background: #000000;
                 color: #dbffff;
                 font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 13px;
@@ -625,11 +612,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #toolButton {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #351700,
-                    stop:1 #1d0d00
-                );
+                background: #120700;
                 color: #ffad24;
                 border: 2px solid #ff7a00;
                 border-radius: 8px;
@@ -651,7 +634,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #clearButton {
-                background: #061111;
+                background: #000000;
                 color: #eaffff;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
@@ -660,7 +643,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             QPushButton {
-                background: #061111;
+                background: #000000;
                 color: #efffff;
                 border: 1px solid #00bfb5;
                 border-radius: 7px;
@@ -694,7 +677,7 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #prompt, QComboBox {
-                background: #010505;
+                background: #000000;
                 color: #ffffff;
                 border: 2px solid #39ff14;
                 border-radius: 7px;
