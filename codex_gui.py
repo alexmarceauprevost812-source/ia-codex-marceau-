@@ -864,17 +864,43 @@ class TiLexCodexWindow(QMainWindow):
                 color: #000000;
             }}
 
-            QPushButton, #toolButton, #panelTabButton, #reopenPanelButton,
-            #newProjectButton, #openProjectButton, #clearButton {{
+            QPushButton,
+            #toolButton,
+            #panelTabButton,
+            #reopenPanelButton,
+            #newProjectButton,
+            #openProjectButton,
+            #clearButton,
+            #sendButton {{
+                background: {panel};
                 color: {accent};
-                border-color: {accent};
+                border: 1px solid {accent};
             }}
 
-            QPushButton:hover, #toolButton:hover, #panelTabButton:hover,
-            #reopenPanelButton:hover, #newProjectButton:hover,
-            #openProjectButton:hover, #clearButton:hover {{
+            QPushButton:hover,
+            #toolButton:hover,
+            #panelTabButton:hover,
+            #reopenPanelButton:hover,
+            #newProjectButton:hover,
+            #openProjectButton:hover,
+            #clearButton:hover,
+            #sendButton:hover {{
+                background: {accent};
+                color: #000000;
+                border: 1px solid {accent};
+            }}
+
+            QPushButton:pressed,
+            #toolButton:pressed,
+            #panelTabButton:pressed,
+            #reopenPanelButton:pressed,
+            #newProjectButton:pressed,
+            #openProjectButton:pressed,
+            #clearButton:pressed,
+            #sendButton:pressed {{
+                background: {accent};
                 color: #ffffff;
-                border-color: {accent};
+                border: 1px solid {accent};
             }}
 
             #prompt, QComboBox {{
