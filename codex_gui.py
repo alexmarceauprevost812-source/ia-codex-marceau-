@@ -264,10 +264,10 @@ class TiLexCodexWindow(QMainWindow):
         self.editor = QPlainTextEdit()
         self.editor.setObjectName("editor")
         self.editor.setLineWrapMode(QPlainTextEdit.NoWrap)
-        mono = QFont("Cascadia Code")
-        mono.setStyleHint(QFont.Monospace)
-        mono.setPointSize(11)
-        self.editor.setFont(mono)
+        pretty_font = QFont("Segoe Print")
+        pretty_font.setPointSize(14)
+        pretty_font.setWeight(QFont.Medium)
+        self.editor.setFont(pretty_font)
         self.highlighter = PythonHighlighter(self.editor.document())
         center_layout.addWidget(self.editor, 1)
 
@@ -375,7 +375,7 @@ class TiLexCodexWindow(QMainWindow):
             QMainWindow, QWidget {
                 background: #010404;
                 color: #efffff;
-                font-family: "Segoe UI";
+                font-family: "Segoe Print";
                 font-size: 14px;
             }
 
@@ -422,7 +422,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #ollama {
                 color: #39ff14;
-                font-family: "Cascadia Code";
+                font-family: "Segoe Print";
                 font-weight: 800;
                 padding: 8px 12px;
                 border: 1px solid #00d9cc;
@@ -444,7 +444,7 @@ class TiLexCodexWindow(QMainWindow):
                 border-bottom: 2px solid #39ff14;
                 border-radius: 7px;
                 padding: 7px 11px;
-                font-family: "Cascadia Code";
+                font-family: "Segoe Print";
                 font-weight: 800;
             }
 
@@ -536,7 +536,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #versionLabel {
                 color: #8eff55;
-                font-family: "Cascadia Code";
+                font-family: "Segoe Print";
                 font-weight: 900;
                 font-size: 12px;
             }
@@ -544,6 +544,9 @@ class TiLexCodexWindow(QMainWindow):
             #editor {
                 background: #010507;
                 color: #efffff;
+                font-family: "Segoe Print";
+                font-size: 15px;
+                font-weight: 600;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
                 selection-background-color: #214f25;
@@ -558,9 +561,12 @@ class TiLexCodexWindow(QMainWindow):
             #output {
                 background: #010507;
                 color: #dbffff;
+                font-family: "Segoe Print";
+                font-size: 13px;
+                font-weight: 600;
                 border: 1px solid #00d9cc;
                 border-radius: 7px;
-                font-family: "Cascadia Code";
+                font-family: "Segoe Print";
                 font-size: 12px;
             }
 
@@ -640,7 +646,7 @@ class TiLexCodexWindow(QMainWindow):
                 border-radius: 7px;
                 padding: 8px 10px;
                 min-height: 28px;
-                font-family: "Cascadia Code";
+                font-family: "Segoe Print";
             }
 
             #prompt:focus, QComboBox:focus {
