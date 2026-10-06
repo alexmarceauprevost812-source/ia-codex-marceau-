@@ -814,11 +814,8 @@ class CodexLocalApp(App):
                 yield Static("CODEX • ÉCRITURE / GÉNÉRATION", id="editor_title")
                 with Horizontal(id="editor_row"):
                     with Vertical(id="pane1"):
-                        yield Static("📄 FICHIER 1", id="file1_title")
+                        yield Static("📄 FICHIER", id="file1_title")
                         yield TextArea("", id="editor", language="python", show_line_numbers=True)
-                    with Vertical(id="pane2"):
-                        yield Static("📄 FICHIER 2", id="file2_title")
-                        yield TextArea("", id="editor2", language="python", show_line_numbers=True)
                 yield RichLog(id="chat_log", markup=True, wrap=True, auto_scroll=True)
             with Vertical(id="tools"):
                 yield Static("🛠 OUTILS")
@@ -865,10 +862,9 @@ class CodexLocalApp(App):
         editor.language = language if language in editor.available_languages else None
 
     def on_mount(self):
-        for editor_id in ("#editor", "#editor2"):
-            editor = self.query_one(editor_id, TextArea)
-            editor.register_theme(TI_LEX_TEXTAREA_THEME)
-            editor.theme = "ti_lex_neon"
+        editor = self.query_one("#editor", TextArea)
+        editor.register_theme(TI_LEX_TEXTAREA_THEME)
+        editor.theme = "ti_lex_neon"
         view = self.query_one("#files", ListView)
         for p in project_files():
             rel = p.relative_to(self.root)
@@ -895,9 +891,6 @@ class CodexLocalApp(App):
         if self.current_path:
             self.current_path.write_text(self.query_one("#editor", TextArea).text, encoding="utf-8")
             saved.append(self.current_path.name)
-        if self.secondary_path and self.query_one("#pane2").display:
-            self.secondary_path.write_text(self.query_one("#editor2", TextArea).text, encoding="utf-8")
-            saved.append(self.secondary_path.name)
         if saved:
             self.notify("Sauvegardé : " + " + ".join(saved))
 
@@ -1171,52 +1164,47 @@ class CodexLocalApp(App):
         self._start_multi_file_reveal(changed, outputs or {}, stats_by_file or {})
 
     def _start_multi_file_reveal(self, changed, outputs, stats_by_file):
+        """Affiche un seul fichier à la fois, même si CODEX en modifie plusieurs."""
         if self._reveal_timer:
             self._reveal_timer.stop()
             self._reveal_timer = None
 
         self._reveal_states = []
-        editors = ["#editor", "#editor2"]
-        titles = ["#file1_title", "#file2_title"]
-        panes = ["#pane1", "#pane2"]
+        rel = changed[0]
+        path = (self.root / rel).resolve()
+        self.current_path = path
 
-        self.query_one("#pane2").display = len(changed) > 1
-        self.current_path = (self.root / changed[0]).resolve()
-        self.secondary_path = (self.root / changed[1]).resolve() if len(changed) > 1 else None
+        editor = self.query_one("#editor", TextArea)
+        self._set_editor_language(path, "#editor")
+        editor.text = ""
+        self.query_one("#file1_title", Static).update("📄 " + rel)
+        self.query_one("#pane1").display = True
 
-        for index, rel in enumerate(changed[:2]):
-            path = (self.root / rel).resolve()
-            editor_id = editors[index]
-            editor = self.query_one(editor_id, TextArea)
-            self._set_editor_language(path, editor_id)
-            editor.text = ""
-            self.query_one(titles[index], Static).update("📄 " + rel)
-            self.query_one(panes[index]).display = True
+        code = outputs.get(rel)
+        if code is None and path.is_file():
+            code = path.read_text(encoding="utf-8", errors="replace")
+        code = code or ""
+        lines = code.splitlines(keepends=True)
+        total = len(lines)
 
-            code = outputs.get(rel)
-            if code is None and path.is_file():
-                code = path.read_text(encoding="utf-8", errors="replace")
-            code = code or ""
-            lines = code.splitlines(keepends=True)
-            total = len(lines)
-            # Mode MAX FLUIDE: environ 12 à 16 rafraîchissements par fichier.
-            # Moins de redraws = écriture visuelle beaucoup plus rapide et plus stable.
-            chunk = max(6, (total + 15) // 16)
-            if total > 600:
-                chunk = max(chunk, 40)
-            if total > 1200:
-                chunk = max(chunk, 80)
-            if total > 2500:
-                chunk = max(chunk, 160)
-            self._reveal_states.append({
-                "rel": rel,
-                "path": path,
-                "editor_id": editor_id,
-                "lines": lines,
-                "pos": 0,
-                "chunk": chunk,
-                "stats": stats_by_file.get(rel, {"added": 0, "modified": 0, "deleted": 0}),
-            })
+        # Écriture fluide d'un seul fichier visible.
+        chunk = max(6, (total + 15) // 16)
+        if total > 600:
+            chunk = max(chunk, 40)
+        if total > 1200:
+            chunk = max(chunk, 80)
+        if total > 2500:
+            chunk = max(chunk, 160)
+
+        self._reveal_states.append({
+            "rel": rel,
+            "path": path,
+            "editor_id": "#editor",
+            "lines": lines,
+            "pos": 0,
+            "chunk": chunk,
+            "stats": stats_by_file.get(rel, {"added": 0, "modified": 0, "deleted": 0}),
+        })
 
         self.query_one("#editor_title", Static).update(
             "CODEX • ÉCRITURE PROFESSIONNELLE • "
