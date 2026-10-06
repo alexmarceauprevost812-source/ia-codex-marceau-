@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
-from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -176,6 +176,18 @@ class TiLexCodexWindow(QMainWindow):
         self.typewriter_text = ""
         self.typewriter_index = 0
         self.typewriter_chunk = 1
+
+        # Animations natives PySide6 (aucun HTML).
+        self.thinking_frames = ["◐", "◓", "◑", "◒"]
+        self.thinking_index = 0
+        self.engine_stage_text = "MOTEUR CODEX  •  PRÊT"
+        self.thinking_timer = QTimer(self)
+        self.thinking_timer.setInterval(140)
+        self.thinking_timer.timeout.connect(self._animate_thinking)
+
+        self.panel_animation = QPropertyAnimation(self)
+        self.panel_animation.setDuration(240)
+        self.panel_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         self.setWindowTitle("TI-LEX CODEX • IA Codex Marceau")
         self.resize(1680, 980)
@@ -470,24 +482,55 @@ class TiLexCodexWindow(QMainWindow):
         self.btn_open.setShortcut(QKeySequence("Ctrl+O"))
 
     def _show_right_panel(self, index: int):
-        if not self.right_panel.isVisible():
-            self.right_panel.show()
-            self.main_splitter.setSizes([270, 1030, 380])
-
-        if self.right_stack.currentIndex() == index and self.right_panel.isVisible():
-            self.right_stack.setCurrentIndex(index)
-        else:
-            self.right_stack.setCurrentIndex(index)
+        self.right_stack.setCurrentIndex(index)
 
         self.btn_panel_tools.setProperty("active", index == 0)
         self.btn_panel_results.setProperty("active", index == 1)
-        self.btn_panel_tools.style().unpolish(self.btn_panel_tools)
-        self.btn_panel_tools.style().polish(self.btn_panel_tools)
-        self.btn_panel_results.style().unpolish(self.btn_panel_results)
-        self.btn_panel_results.style().polish(self.btn_panel_results)
+        for button in (self.btn_panel_tools, self.btn_panel_results):
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+        if not self.right_panel.isVisible():
+            self.right_panel.show()
+            self.right_panel.setMaximumWidth(0)
+
+            self.panel_animation.stop()
+            self.panel_animation.setTargetObject(self.right_panel)
+            self.panel_animation.setPropertyName(b"maximumWidth")
+            self.panel_animation.setStartValue(0)
+            self.panel_animation.setEndValue(430)
+            try:
+                self.panel_animation.finished.disconnect()
+            except RuntimeError:
+                pass
+            self.panel_animation.start()
+        else:
+            self.right_panel.setMaximumWidth(16777215)
 
     def _close_right_panel(self):
+        if not self.right_panel.isVisible():
+            return
+
+        width = max(1, self.right_panel.width())
+        self.panel_animation.stop()
+        self.panel_animation.setTargetObject(self.right_panel)
+        self.panel_animation.setPropertyName(b"maximumWidth")
+        self.panel_animation.setStartValue(width)
+        self.panel_animation.setEndValue(0)
+        try:
+            self.panel_animation.finished.disconnect()
+        except RuntimeError:
+            pass
+        self.panel_animation.finished.connect(self._finish_close_right_panel)
+        self.panel_animation.start()
+
+    def _finish_close_right_panel(self):
         self.right_panel.hide()
+        self.right_panel.setMaximumWidth(16777215)
+        try:
+            self.panel_animation.finished.disconnect(self._finish_close_right_panel)
+        except RuntimeError:
+            pass
 
     def _render_codex_results(self, data: dict, changed: list[str]):
         stats = data.get("stats", {}) if isinstance(data, dict) else {}
@@ -954,13 +997,34 @@ class TiLexCodexWindow(QMainWindow):
 
     def _set_engine_stage(self, stage: str, detail: str = "", progress: int = 0):
         stage = stage.upper().strip()
-        text = f"● MOTEUR CODEX  •  {stage}"
+        text = f"MOTEUR CODEX  •  {stage}"
         if detail:
             text += f"  •  {detail}"
+        self.engine_stage_text = text
         if hasattr(self, "engine_status"):
-            self.engine_status.setText(text)
+            prefix = self.thinking_frames[self.thinking_index] if self.thinking_timer.isActive() else "●"
+            self.engine_status.setText(f"{prefix} {text}")
         if hasattr(self, "engine_progress"):
             self.engine_progress.setValue(max(0, min(100, progress)))
+
+    def _start_thinking_animation(self):
+        self.thinking_index = 0
+        if not self.thinking_timer.isActive():
+            self.thinking_timer.start()
+        self._animate_thinking()
+
+    def _stop_thinking_animation(self):
+        if self.thinking_timer.isActive():
+            self.thinking_timer.stop()
+        if hasattr(self, "engine_status"):
+            self.engine_status.setText(f"● {self.engine_stage_text}")
+
+    def _animate_thinking(self):
+        if not hasattr(self, "engine_status"):
+            return
+        frame = self.thinking_frames[self.thinking_index % len(self.thinking_frames)]
+        self.thinking_index = (self.thinking_index + 1) % len(self.thinking_frames)
+        self.engine_status.setText(f"{frame} {self.engine_stage_text}")
 
     def _update_engine_from_status(self, message: str):
         low = message.lower()
@@ -1345,6 +1409,7 @@ class TiLexCodexWindow(QMainWindow):
 
             self.last_codex_request = request
             self._set_engine_stage("ANALYSE", "compréhension de la commande", 10)
+            self._start_thinking_animation()
 
             mode = self.mode_combo.currentText()
             if mode == "PRO":
@@ -1380,6 +1445,7 @@ class TiLexCodexWindow(QMainWindow):
             self.worker = worker
             thread.start()
         except BaseException as exc:
+            self._stop_thinking_animation()
             self._record_gui_exception(exc, "send_codex")
             self.prompt.setEnabled(True)
             self._set_tools_enabled(True)
@@ -1424,6 +1490,7 @@ class TiLexCodexWindow(QMainWindow):
             self._set_tools_enabled(True)
 
             if not result.ok:
+                self._stop_thinking_animation()
                 self._log(result.message, "ERROR")
                 QMessageBox.critical(self, "Erreur CODEX", result.message)
                 self.prompt.setFocus()
@@ -1459,8 +1526,10 @@ class TiLexCodexWindow(QMainWindow):
                         self._log(f"Ouverture fichier modifié: {exc}", "WARN")
 
             self._set_engine_stage("TERMINÉ", "commande complétée", 100)
+            self._stop_thinking_animation()
             self.prompt.setFocus()
         except BaseException as exc:
+            self._stop_thinking_animation()
             self._record_gui_exception(exc, "_codex_finished")
             self.prompt.setEnabled(True)
             self._set_tools_enabled(True)
@@ -1474,6 +1543,7 @@ class TiLexCodexWindow(QMainWindow):
 
     def _codex_failed(self, message: str):
         try:
+            self._stop_thinking_animation()
             self.prompt.setEnabled(True)
             self._set_tools_enabled(True)
             self._set_engine_stage("ERREUR", str(message), 0)
