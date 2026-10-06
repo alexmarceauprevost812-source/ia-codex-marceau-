@@ -11,7 +11,7 @@ from pathlib import Path
 
 import requests
 from PySide6.QtCore import QEasingCurve, QObject, QParallelAnimationGroup, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QInputDialog,
+    QMenu,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSplitter,
     QStackedWidget,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -251,6 +253,8 @@ class TiLexCodexWindow(QMainWindow):
         self.worker: CodexWorker | None = None
         self.last_codex_request = ""
         self.last_right_panel_index = 0
+        self.display_theme = "NOIR"
+        self.neon_accent = "#39ff14"
         self.typewriter_timer = QTimer(self)
         self.typewriter_timer.setInterval(12)
         self.typewriter_timer.timeout.connect(self._typewriter_step)
@@ -283,6 +287,7 @@ class TiLexCodexWindow(QMainWindow):
 
         self._build_ui()
         self._apply_theme()
+        self._apply_display_overrides()
         self._load_project(self.project_root)
         self._refresh_ollama_status()
 
@@ -295,8 +300,40 @@ class TiLexCodexWindow(QMainWindow):
         # ===== HEADER =====
         header = QFrame(objectName="header")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(18, 10, 18, 10)
+        header_layout.setContentsMargins(8, 10, 18, 10)
         header_layout.setSpacing(14)
+
+        # Menu AFFICHAGE toujours visible, complètement à gauche.
+        self.display_button = QToolButton()
+        self.display_button.setObjectName("displayMenuButton")
+        self.display_button.setText("☰  AFFICHAGE")
+        self.display_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
+        display_menu = QMenu(self.display_button)
+        display_menu.setObjectName("displayMenu")
+
+        theme_menu = display_menu.addMenu("Fond")
+        for label, key in (
+            ("Noir", "NOIR"),
+            ("Gris mat", "GRIS"),
+            ("Blanc", "BLANC"),
+        ):
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked=False, value=key: self._set_display_theme(value))
+            theme_menu.addAction(action)
+
+        neon_menu = display_menu.addMenu("Couleur néon")
+        for label, value in (
+            ("Vert néon", "#39ff14"),
+            ("Orange néon", "#ff7a00"),
+            ("Cyan néon", "#00efff"),
+        ):
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked=False, color=value: self._set_neon_accent(color))
+            neon_menu.addAction(action)
+
+        self.display_button.setMenu(display_menu)
+        header_layout.addWidget(self.display_button, 0, Qt.AlignmentFlag.AlignLeft)
 
         brand_box = QVBoxLayout()
         brand_box.setSpacing(0)
@@ -736,6 +773,125 @@ class TiLexCodexWindow(QMainWindow):
         btn.setMinimumHeight(48)
         btn.clicked.connect(callback)
         return btn
+
+    def _set_display_theme(self, theme: str):
+        self.display_theme = str(theme).upper()
+        self._apply_theme()
+        self._apply_display_overrides()
+
+    def _set_neon_accent(self, color: str):
+        self.neon_accent = color
+        self._apply_theme()
+        self._apply_display_overrides()
+
+    def _apply_display_overrides(self):
+        accent = self.neon_accent
+        theme = self.display_theme
+
+        if theme == "BLANC":
+            bg = "#f4f4f4"
+            panel = "#ffffff"
+            text = "#151515"
+            muted = "#444444"
+            editor_bg = "#ffffff"
+        elif theme == "GRIS":
+            bg = "#1b1b1b"
+            panel = "#242424"
+            text = "#f2f2f2"
+            muted = "#b0b0b0"
+            editor_bg = "#202020"
+        else:
+            bg = "#000000"
+            panel = "#000000"
+            text = "#f4f4f4"
+            muted = "#aaaaaa"
+            editor_bg = "#000000"
+
+        overrides = f"""
+            QMainWindow, QWidget {{
+                background: {bg};
+                color: {text};
+            }}
+
+            #header, #enginePanel, #panel, #commandBar,
+            #projectTree, #editor, #output, #diffView,
+            #tabTitle, #langBadge, #topStatus, #ollama,
+            #infoCard, #reflexionAvatar {{
+                background: {panel};
+            }}
+
+            #editor, #output, #diffView, #projectTree {{
+                background: {editor_bg};
+                color: {text};
+            }}
+
+            #sectionTitle, #subtitle, #engineFlow, #engineDetail,
+            #langBadge, #versionLabel, #cardFooter {{
+                color: {accent};
+            }}
+
+            #displayMenuButton {{
+                background: transparent;
+                color: {accent};
+                border: none;
+                padding: 8px 10px;
+                font-weight: 900;
+                font-size: 13px;
+            }}
+
+            #displayMenuButton:hover {{
+                background: {panel};
+                color: {accent};
+            }}
+
+            QMenu#displayMenu, QMenu {{
+                background: {panel};
+                color: {text};
+                border: 1px solid {accent};
+                padding: 5px;
+            }}
+
+            QMenu::item {{
+                padding: 7px 22px 7px 10px;
+            }}
+
+            QMenu::item:selected {{
+                background: {accent};
+                color: #000000;
+            }}
+
+            QPushButton, #toolButton, #panelTabButton, #reopenPanelButton,
+            #newProjectButton, #openProjectButton, #clearButton {{
+                color: {accent};
+                border-color: {accent};
+            }}
+
+            QPushButton:hover, #toolButton:hover, #panelTabButton:hover,
+            #reopenPanelButton:hover, #newProjectButton:hover,
+            #openProjectButton:hover, #clearButton:hover {{
+                color: #ffffff;
+                border-color: {accent};
+            }}
+
+            #prompt, QComboBox {{
+                color: {text};
+                background: {panel};
+                border-color: {accent};
+            }}
+
+            #engineProgress::chunk {{
+                background: {accent};
+            }}
+
+            #muted {{
+                color: {muted};
+            }}
+
+            QScrollBar::handle:vertical {{
+                background: {accent};
+            }}
+        """
+        self.setStyleSheet(self.styleSheet() + overrides)
 
     def _apply_theme(self):
         self.setStyleSheet("""
