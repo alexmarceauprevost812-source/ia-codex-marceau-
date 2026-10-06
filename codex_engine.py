@@ -458,6 +458,39 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche pa
                 pass
         return backup
 
+    @staticmethod
+    def _readme_generation_rules(target: str) -> str:
+        """Règles supplémentaires quand le fichier cible est un README."""
+        if Path(target).name.lower() != "readme.md":
+            return ""
+        return """
+RÈGLES README OBLIGATOIRES:
+- Une section "Structure du projet" est informative seulement. Mets l’arborescence uniquement dans un bloc de code marqué text.
+- Les lignes d’arborescence utilisant ├──, └──, │ ou caractères similaires ne sont JAMAIS des commandes.
+- Les blocs PowerShell doivent contenir uniquement de vraies commandes PowerShell exécutables.
+- Les blocs Bash ou sh doivent contenir uniquement de vraies commandes Linux/Kali exécutables.
+- Ne mélange jamais une arborescence de fichiers avec une section Installation, Lancement, Commandes, PowerShell ou Bash.
+- Si le projet est Python, ne propose pas npm install/npm start sauf si un package.json et un workflow Node sont réellement présents.
+- Vérifie les vrais noms de fichiers du projet avant d’écrire une commande de lancement.
+"""
+
+    @staticmethod
+    def _validate_readme_command_blocks(content: str) -> tuple[bool, str]:
+        """Empêche une arborescence décorative d’être présentée comme commande terminal."""
+        command_fence = re.compile(
+            r"```(?:powershell|ps1|bash|sh|shell|cmd|bat)\s*\n([\s\S]*?)```",
+            re.IGNORECASE,
+        )
+        tree_line = re.compile(r"^\s*[├└│┌┬┼─]+")
+        for block in command_fence.findall(content or ""):
+            for line in block.splitlines():
+                if tree_line.match(line):
+                    return (
+                        False,
+                        "README invalide: une ligne d’arborescence (├──/└──/│) se trouve dans un bloc de commandes. Déplace l’arborescence dans un bloc text et garde uniquement de vraies commandes dans PowerShell/Bash.",
+                    )
+        return True, ""
+
     def _validate_generated_content(self, target: str, content: str):
         """Valide le langage et la syntaxe avant d'écrire un fichier."""
         suffix = Path(target).suffix.lower()
@@ -492,6 +525,10 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche pa
             return True, ""
 
         if suffix in {".md", ".txt"}:
+            if Path(target).name.lower() == "readme.md":
+                valid, error = self._validate_readme_command_blocks(content)
+                if not valid:
+                    return False, error
             return True, ""
 
         if not stripped:
@@ -537,6 +574,7 @@ CONTENU INVALIDE:
 {content}
 
 Corrige uniquement ce qui est nécessaire pour produire le contenu COMPLET et valide de {target}.
+{self._readme_generation_rules(target)}
 Respecte strictement le langage correspondant à l'extension.
 Conserve les fonctions, classes, imports et comportements utiles déjà présents.
 Ne renvoie ni explication, ni Markdown, ni diff, ni résumé.
@@ -567,6 +605,8 @@ Demande: {request}
 
 CONTENU ACTUEL:
 {old_content}
+
+{self._readme_generation_rules(target)}
 
 Réponds UNIQUEMENT en JSON valide avec cette structure:
 {{
@@ -676,6 +716,8 @@ COMMANDE: {request}
 FICHIER ACTUEL:
 {old_content if old_content else "(nouveau fichier)"}
 
+{self._readme_generation_rules(target)}
+
 CONTRAT OBLIGATOIRE:
 - Retourne le CONTENU FINAL COMPLET du fichier {target}.
 - Pas de résumé, pas d'explication, pas de Markdown, pas de diff.
@@ -753,6 +795,8 @@ Objectif: {task.get("goal", "implémenter la demande")}
 Contexte utile:
 {context or "(aucun fichier source nécessaire)"}
 
+{self._readme_generation_rules(target)}
+
 Écris le contenu COMPLET, exécutable et professionnel du fichier cible uniquement.
 Le résultat doit être le vrai fichier final demandé, jamais un résumé, jamais une description et jamais un pseudo-code.
 Si le fichier existe déjà, conserve tout le code qui n'est pas directement concerné par la demande:
@@ -794,6 +838,8 @@ Fichier cible: {target}
 
 CONTENU ACTUEL COMPLET:
 {old_content}
+
+{self._readme_generation_rules(target)}
 
 Refais la modification en conservant TOUT ce qui n'est pas directement concerné par la demande.
 Ne raccourcis pas le fichier inutilement. Garde les fonctions, classes, imports et comportements existants.
