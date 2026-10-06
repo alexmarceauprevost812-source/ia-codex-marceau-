@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import traceback
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QProgressBar,
     QSizePolicy,
     QSplitter,
     QTreeWidget,
@@ -133,6 +135,7 @@ class TiLexCodexWindow(QMainWindow):
         self.current_file: Path | None = None
         self.worker_thread: QThread | None = None
         self.worker: CodexWorker | None = None
+        self.last_codex_request = ""
         self.typewriter_timer = QTimer(self)
         self.typewriter_timer.setInterval(12)
         self.typewriter_timer.timeout.connect(self._typewriter_step)
@@ -187,10 +190,32 @@ class TiLexCodexWindow(QMainWindow):
 
         root_layout.addWidget(header)
 
-        self.top_status = QLabel("● PRÊT  •  TI-LEX CODEX")
-        self.top_status.setObjectName("topStatus")
-        self.top_status.setAlignment(Qt.AlignCenter)
-        root_layout.addWidget(self.top_status)
+        engine_panel = QFrame(objectName="enginePanel")
+        engine_layout = QHBoxLayout(engine_panel)
+        engine_layout.setContentsMargins(10, 5, 10, 5)
+        engine_layout.setSpacing(10)
+
+        self.engine_status = QLabel("● MOTEUR CODEX  •  PRÊT")
+        self.engine_status.setObjectName("engineStatus")
+        self.engine_status.setMinimumWidth(260)
+
+        self.engine_flow = QLabel(
+            "ANALYSE  →  PLAN  →  EXÉCUTION  →  ÉCRITURE  →  VALIDATION  →  README"
+        )
+        self.engine_flow.setObjectName("engineFlow")
+        self.engine_flow.setAlignment(Qt.AlignCenter)
+
+        self.engine_progress = QProgressBar()
+        self.engine_progress.setObjectName("engineProgress")
+        self.engine_progress.setRange(0, 100)
+        self.engine_progress.setValue(0)
+        self.engine_progress.setTextVisible(False)
+        self.engine_progress.setMaximumWidth(220)
+
+        engine_layout.addWidget(self.engine_status)
+        engine_layout.addWidget(self.engine_flow, 1)
+        engine_layout.addWidget(self.engine_progress)
+        root_layout.addWidget(engine_panel)
 
         # ===== MAIN AREA =====
         main_splitter = QSplitter(Qt.Horizontal)
@@ -211,7 +236,7 @@ class TiLexCodexWindow(QMainWindow):
         self.tree.setHeaderHidden(True)
         self.tree.setObjectName("projectTree")
         self.tree.itemDoubleClicked.connect(self._open_tree_item)
-        left_layout.addWidget(self.tree, 4)
+        left_layout.addWidget(self.tree, 8)
 
         self.btn_new = QPushButton("＋  Nouveau projet")
         self.btn_new.setObjectName("newProjectButton")
@@ -228,47 +253,12 @@ class TiLexCodexWindow(QMainWindow):
         self.project_label.setObjectName("muted")
         left_layout.addWidget(self.project_label)
 
-        # Compact language / TI-LEX-AL card.
-        # Smaller than before so the project tree has much more room.
-        info_card = QFrame(objectName="infoCard")
-        info_card.setMaximumHeight(185)
-        info_layout = QVBoxLayout(info_card)
-        info_layout.setContentsMargins(9, 8, 9, 8)
-        info_layout.setSpacing(4)
-
+        # Compact language badge only: maximum space for project files.
         self.lang_badge = QLabel("📄  AUCUN FICHIER")
         self.lang_badge.setObjectName("langBadge")
         self.lang_badge.setAlignment(Qt.AlignCenter)
-        info_layout.addWidget(self.lang_badge)
-
-        self.tilex_al_logo = QLabel()
-        self.tilex_al_logo.setObjectName("tilexAlLogo")
-        self.tilex_al_logo.setAlignment(Qt.AlignCenter)
-        self.tilex_al_logo.setMaximumHeight(78)
-
-        # Optional local asset: assets/tilex_al.png
-        # If it is missing, the branded text fallback is displayed.
-        tilex_logo_path = Path(__file__).resolve().parent / "assets" / "tilex_al.png"
-        tilex_pixmap = QPixmap(str(tilex_logo_path))
-        if not tilex_pixmap.isNull():
-            self.tilex_al_logo.setPixmap(
-                tilex_pixmap.scaled(
-                    230, 72,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
-        else:
-            self.tilex_al_logo.setText("🔥  TI-LEX-AL")
-
-        info_layout.addWidget(self.tilex_al_logo)
-
-        card_footer = QLabel("IA CODEX MARCEAU  •  v1.1.0")
-        card_footer.setObjectName("cardFooter")
-        card_footer.setAlignment(Qt.AlignCenter)
-        info_layout.addWidget(card_footer)
-
-        left_layout.addWidget(info_card)
+        self.lang_badge.setMaximumHeight(38)
+        left_layout.addWidget(self.lang_badge)
 
         # CENTER
         center = QFrame(objectName="panel")
@@ -335,7 +325,7 @@ class TiLexCodexWindow(QMainWindow):
         main_splitter.setStretchFactor(0, 2)
         main_splitter.setStretchFactor(1, 7)
         main_splitter.setStretchFactor(2, 3)
-        main_splitter.setSizes([285, 1015, 380])
+        main_splitter.setSizes([270, 1030, 380])
 
         root_layout.addWidget(main_splitter, 1)
 
@@ -398,6 +388,37 @@ class TiLexCodexWindow(QMainWindow):
                 font-size: 14px;
             }
 
+            #enginePanel {
+                background: #000000;
+                border: 1px solid #00d9cc;
+                border-radius: 8px;
+            }
+
+            #engineStatus {
+                color: #ff9d21;
+                font-weight: 900;
+                font-size: 12px;
+            }
+
+            #engineFlow {
+                color: #8eff55;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
+            #engineProgress {
+                background: #050505;
+                border: 1px solid #00d9cc;
+                border-radius: 5px;
+                min-height: 10px;
+                max-height: 10px;
+            }
+
+            #engineProgress::chunk {
+                background: #39ff14;
+                border-radius: 4px;
+            }
+
 
             #topStatus {
                 background: #000000;
@@ -418,17 +439,6 @@ class TiLexCodexWindow(QMainWindow):
                 padding: 5px 7px;
                 font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 12px;
-                font-weight: 900;
-            }
-
-            #tilexAlLogo {
-                background: #000000;
-                color: #ff8a00;
-                border: 1px solid #00d9cc;
-                border-radius: 7px;
-                padding: 3px;
-                font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
-                font-size: 20px;
                 font-weight: 900;
             }
 
@@ -727,10 +737,57 @@ class TiLexCodexWindow(QMainWindow):
             }
         """)
 
+    def _set_engine_stage(self, stage: str, detail: str = "", progress: int = 0):
+        stage = stage.upper().strip()
+        text = f"● MOTEUR CODEX  •  {stage}"
+        if detail:
+            text += f"  •  {detail}"
+        if hasattr(self, "engine_status"):
+            self.engine_status.setText(text)
+        if hasattr(self, "engine_progress"):
+            self.engine_progress.setValue(max(0, min(100, progress)))
+
+    def _update_engine_from_status(self, message: str):
+        low = message.lower()
+        if any(word in low for word in ("plan", "analyse", "analy")):
+            self._set_engine_stage("PLAN", "préparation des actions", 25)
+        elif any(word in low for word in ("écrit", "write", "génér", "generate", "patch", "direct")):
+            self._set_engine_stage("ÉCRITURE", "modification des fichiers", 65)
+        elif any(word in low for word in ("valid", "test", "compile", "repair", "corrig")):
+            self._set_engine_stage("VALIDATION", "contrôle et correction", 82)
+        elif any(word in low for word in ("apply", "appli", "exécut", "execute", "action")):
+            self._set_engine_stage("EXÉCUTION", "application du plan", 45)
+
+    def _update_readme_summary(self, request: str, changed: list[str], result_message: str):
+        readme = self.project_root / "README.md"
+        try:
+            previous = readme.read_text(encoding="utf-8", errors="replace") if readme.exists() else f"# {self.project_root.name}\n"
+            start = "<!-- TI-LEX-CODEX-SUMMARY:START -->"
+            end = "<!-- TI-LEX-CODEX-SUMMARY:END -->"
+            files = ", ".join(changed) if changed else "aucun fichier signalé"
+            block = (
+                f"\n{start}\n"
+                f"## Dernière action TI-LEX CODEX\n\n"
+                f"- **Commande :** {request}\n"
+                f"- **Résultat :** {result_message}\n"
+                f"- **Fichiers :** {files}\n"
+                f"- **Mise à jour :** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"{end}\n"
+            )
+            if start in previous and end in previous:
+                before = previous.split(start, 1)[0].rstrip()
+                after = previous.split(end, 1)[1].lstrip()
+                content = before + block + ("\n" + after if after else "")
+            else:
+                content = previous.rstrip() + "\n" + block
+            readme.write_text(content, encoding="utf-8")
+            return "README.md"
+        except Exception as exc:
+            self._log(f"Résumé README non mis à jour : {exc}", "WARN")
+            return None
+
     def _log(self, message: str, kind: str = "INFO"):
         self.output.appendPlainText(f"[{kind}]  {message}")
-        if hasattr(self, "top_status"):
-            self.top_status.setText(f"● {kind}  •  {message}")
 
     def _load_project(self, root: Path):
         self.project_root = root.resolve()
@@ -831,7 +888,7 @@ class TiLexCodexWindow(QMainWindow):
             rel = path
 
         self.file_title.setText(f"✍  ÉCRITURE EN TEMPS RÉEL  •  {rel}")
-        self.top_status.setText(f"✍ CODEX ÉCRIT  •  {rel}")
+        self._set_engine_stage("ÉCRITURE", f"{rel}", 70)
 
         self.editor.setUpdatesEnabled(False)
         self.editor.clear()
@@ -866,6 +923,7 @@ class TiLexCodexWindow(QMainWindow):
                 except ValueError:
                     rel = self.current_file
                 self.file_title.setText(f"📄 {rel}")
+                self._set_engine_stage("VALIDATION", "écriture terminée", 85)
                 self._log(f"Écriture en temps réel terminée : {rel}", "SUCCESS")
             return
 
@@ -1070,6 +1128,9 @@ class TiLexCodexWindow(QMainWindow):
             if not request:
                 return
 
+            self.last_codex_request = request
+            self._set_engine_stage("ANALYSE", "compréhension de la commande", 10)
+
             mode = self.mode_combo.currentText()
             if mode == "PRO":
                 request = "/pro " + request
@@ -1116,6 +1177,7 @@ class TiLexCodexWindow(QMainWindow):
 
     def _safe_worker_status(self, message: str):
         try:
+            self._update_engine_from_status(str(message))
             self._log(str(message), "CODEX")
         except Exception as exc:
             self._record_gui_exception(exc, "worker_status")
@@ -1153,6 +1215,14 @@ class TiLexCodexWindow(QMainWindow):
 
             self._log(result.message, "SUCCESS")
             changed = list(result.changed or [])
+            self._set_engine_stage("README", "mise à jour du résumé", 92)
+            readme_changed = self._update_readme_summary(
+                self.last_codex_request,
+                changed,
+                result.message,
+            )
+            if readme_changed and readme_changed not in changed:
+                changed.append(readme_changed)
 
             # Le rafraîchissement du projet ne doit jamais fermer l'interface.
             try:
@@ -1170,6 +1240,7 @@ class TiLexCodexWindow(QMainWindow):
                         self._record_gui_exception(exc, "open_changed_file")
                         self._log(f"Ouverture fichier modifié: {exc}", "WARN")
 
+            self._set_engine_stage("TERMINÉ", "commande complétée", 100)
             self.prompt.setFocus()
         except BaseException as exc:
             self._record_gui_exception(exc, "_codex_finished")
@@ -1187,6 +1258,7 @@ class TiLexCodexWindow(QMainWindow):
         try:
             self.prompt.setEnabled(True)
             self._set_tools_enabled(True)
+            self._set_engine_stage("ERREUR", str(message), 0)
             self._log(message, "ERROR")
             QMessageBox.critical(
                 self,
