@@ -10,7 +10,7 @@ from pathlib import Path
 
 import requests
 from PySide6.QtCore import QObject, QThread, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence, QSyntaxHighlighter, QTextCharFormat
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPixmap, QSyntaxHighlighter, QTextCharFormat
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -181,6 +181,11 @@ class TiLexCodexWindow(QMainWindow):
 
         root_layout.addWidget(header)
 
+        self.top_status = QLabel("● PRÊT  •  TI-LEX CODEX")
+        self.top_status.setObjectName("topStatus")
+        self.top_status.setAlignment(Qt.AlignCenter)
+        root_layout.addWidget(self.top_status)
+
         # ===== MAIN AREA =====
         main_splitter = QSplitter(Qt.Horizontal)
         main_splitter.setChildrenCollapsible(False)
@@ -200,7 +205,7 @@ class TiLexCodexWindow(QMainWindow):
         self.tree.setHeaderHidden(True)
         self.tree.setObjectName("projectTree")
         self.tree.itemDoubleClicked.connect(self._open_tree_item)
-        left_layout.addWidget(self.tree, 1)
+        left_layout.addWidget(self.tree, 4)
 
         self.btn_new = QPushButton("＋  Nouveau projet")
         self.btn_new.setObjectName("newProjectButton")
@@ -217,37 +222,45 @@ class TiLexCodexWindow(QMainWindow):
         self.project_label.setObjectName("muted")
         left_layout.addWidget(self.project_label)
 
-        # Decorative TI-LEX card, matching the approved mockup
+        # Compact language / TI-LEX-AL card.
+        # Smaller than before so the project tree has much more room.
         info_card = QFrame(objectName="infoCard")
+        info_card.setMaximumHeight(185)
         info_layout = QVBoxLayout(info_card)
-        info_layout.setContentsMargins(14, 14, 14, 14)
-        info_layout.setSpacing(8)
+        info_layout.setContentsMargins(9, 8, 9, 8)
+        info_layout.setSpacing(4)
 
-        logo = QLabel("▲")
-        logo.setObjectName("cardLogo")
-        logo.setAlignment(Qt.AlignCenter)
+        self.lang_badge = QLabel("📄  AUCUN FICHIER")
+        self.lang_badge.setObjectName("langBadge")
+        self.lang_badge.setAlignment(Qt.AlignCenter)
+        info_layout.addWidget(self.lang_badge)
 
-        card_title = QLabel("IA CODEX\nMARCEAU")
-        card_title.setObjectName("cardTitle")
-        card_title.setAlignment(Qt.AlignCenter)
+        self.tilex_al_logo = QLabel()
+        self.tilex_al_logo.setObjectName("tilexAlLogo")
+        self.tilex_al_logo.setAlignment(Qt.AlignCenter)
+        self.tilex_al_logo.setMaximumHeight(78)
 
-        card_text = QLabel("COMPRENDRE\nDÉVELOPPER\nOPTIMISER\nAUTOMATISER")
-        card_text.setObjectName("cardText")
-        card_text.setAlignment(Qt.AlignCenter)
+        # Optional local asset: assets/tilex_al.png
+        # If it is missing, the branded text fallback is displayed.
+        tilex_logo_path = Path(__file__).resolve().parent / "assets" / "tilex_al.png"
+        tilex_pixmap = QPixmap(str(tilex_logo_path))
+        if not tilex_pixmap.isNull():
+            self.tilex_al_logo.setPixmap(
+                tilex_pixmap.scaled(
+                    230, 72,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            )
+        else:
+            self.tilex_al_logo.setText("🔥  TI-LEX-AL")
 
-        card_footer = QLabel("Noir + vert lime + orange")
+        info_layout.addWidget(self.tilex_al_logo)
+
+        card_footer = QLabel("IA CODEX MARCEAU  •  v1.1.0")
         card_footer.setObjectName("cardFooter")
         card_footer.setAlignment(Qt.AlignCenter)
-
-        version = QLabel("///                                      v1.0.0")
-        version.setObjectName("versionLabel")
-
-        info_layout.addWidget(logo)
-        info_layout.addWidget(card_title)
-        info_layout.addWidget(card_text)
-        info_layout.addStretch()
         info_layout.addWidget(card_footer)
-        info_layout.addWidget(version)
 
         left_layout.addWidget(info_card)
 
@@ -316,7 +329,7 @@ class TiLexCodexWindow(QMainWindow):
         main_splitter.setStretchFactor(0, 2)
         main_splitter.setStretchFactor(1, 7)
         main_splitter.setStretchFactor(2, 3)
-        main_splitter.setSizes([330, 930, 390])
+        main_splitter.setSizes([285, 1015, 380])
 
         root_layout.addWidget(main_splitter, 1)
 
@@ -377,6 +390,40 @@ class TiLexCodexWindow(QMainWindow):
                 color: #efffff;
                 font-family: "Segoe Print";
                 font-size: 14px;
+            }
+
+
+            #topStatus {
+                background: #020909;
+                color: #a9ff5a;
+                border: 1px solid #00d9cc;
+                border-radius: 7px;
+                padding: 5px 10px;
+                font-family: "Segoe Print";
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            #langBadge {
+                background: #020708;
+                color: #baff64;
+                border: 1px solid #39ff14;
+                border-radius: 7px;
+                padding: 5px 7px;
+                font-family: "Segoe Print";
+                font-size: 12px;
+                font-weight: 900;
+            }
+
+            #tilexAlLogo {
+                background: #020505;
+                color: #ff8a00;
+                border: 1px solid #00d9cc;
+                border-radius: 7px;
+                padding: 3px;
+                font-family: "Segoe Print";
+                font-size: 20px;
+                font-weight: 900;
             }
 
             #header {
@@ -499,7 +546,8 @@ class TiLexCodexWindow(QMainWindow):
             }
 
             #infoCard {
-                min-height: 240px;
+                min-height: 145px;
+                max-height: 185px;
                 background: qlineargradient(
                     x1:0, y1:0, x2:1, y2:1,
                     stop:0 #030a08,
@@ -530,7 +578,7 @@ class TiLexCodexWindow(QMainWindow):
 
             #cardFooter {
                 color: #b8ff55;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 700;
             }
 
@@ -692,6 +740,8 @@ class TiLexCodexWindow(QMainWindow):
 
     def _log(self, message: str, kind: str = "INFO"):
         self.output.appendPlainText(f"[{kind}]  {message}")
+        if hasattr(self, "top_status"):
+            self.top_status.setText(f"● {kind}  •  {message}")
 
     def _load_project(self, root: Path):
         self.project_root = root.resolve()
@@ -728,7 +778,13 @@ class TiLexCodexWindow(QMainWindow):
                 parent_item.addChild(item)
                 self._populate_tree(item, path, depth + 1)
             elif path.suffix.lower() in TEXT_EXTENSIONS or path.name in {"README.md", ".gitignore"}:
-                icon = "🐍" if path.suffix.lower() == ".py" else "📄"
+                icon_map = {
+                    ".py": "🐍", ".js": "🟨", ".jsx": "🟨", ".ts": "🔷", ".tsx": "🔷",
+                    ".html": "🌐", ".htm": "🌐", ".css": "🎨", ".scss": "🎨",
+                    ".json": "🧩", ".md": "Ⓜ", ".ps1": "💠", ".sh": "🐚",
+                    ".c": "©", ".cpp": "C++", ".java": "☕", ".go": "🔹", ".rs": "⚙",
+                }
+                icon = icon_map.get(path.suffix.lower(), "📄")
                 item = QTreeWidgetItem([f"{icon} {path.name}"])
                 item.setData(0, Qt.UserRole, str(path))
                 item.setData(0, Qt.UserRole + 1, "file")
@@ -741,6 +797,31 @@ class TiLexCodexWindow(QMainWindow):
         path = Path(item.data(0, Qt.UserRole))
         self.open_file(path)
 
+    def _update_language_badge(self, path: Path):
+        ext = path.suffix.lower()
+        language_map = {
+            ".py": ("🐍", "PYTHON"),
+            ".js": ("🟨", "JAVASCRIPT"),
+            ".jsx": ("🟨", "JAVASCRIPT / JSX"),
+            ".ts": ("🔷", "TYPESCRIPT"),
+            ".tsx": ("🔷", "TYPESCRIPT / TSX"),
+            ".html": ("🌐", "HTML"),
+            ".htm": ("🌐", "HTML"),
+            ".css": ("🎨", "CSS"),
+            ".scss": ("🎨", "SCSS"),
+            ".json": ("🧩", "JSON"),
+            ".md": ("Ⓜ", "MARKDOWN"),
+            ".ps1": ("💠", "POWERSHELL"),
+            ".sh": ("🐚", "SHELL"),
+            ".c": ("©", "C"),
+            ".cpp": ("C++", "C++"),
+            ".java": ("☕", "JAVA"),
+            ".go": ("🔹", "GO"),
+            ".rs": ("⚙", "RUST"),
+        }
+        icon, language = language_map.get(ext, ("📄", ext.lstrip(".").upper() or "FICHIER"))
+        self.lang_badge.setText(f"{icon}  {language}  •  {path.name}")
+
     def open_file(self, path: Path):
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
@@ -750,6 +831,7 @@ class TiLexCodexWindow(QMainWindow):
 
         self.current_file = path
         self.editor.setPlainText(content)
+        self._update_language_badge(path)
         try:
             rel = path.relative_to(self.project_root)
         except ValueError:
@@ -811,6 +893,7 @@ class TiLexCodexWindow(QMainWindow):
                     self.current_file = None
                     self.editor.clear()
                     self.file_title.setText("📄 Aucun fichier ouvert")
+            self.lang_badge.setText("📄  AUCUN FICHIER")
                     self._load_project(project)
                 return
 
@@ -824,6 +907,7 @@ class TiLexCodexWindow(QMainWindow):
             self.current_file = None
             self.editor.clear()
             self.file_title.setText("📄 Aucun fichier ouvert")
+            self.lang_badge.setText("📄  AUCUN FICHIER")
             self._load_project(project)
             self._log(f"Nouveau projet créé : {project}", "SUCCESS")
             QMessageBox.information(
@@ -846,6 +930,7 @@ class TiLexCodexWindow(QMainWindow):
             self.current_file = None
             self.editor.clear()
             self.file_title.setText("📄 Aucun fichier ouvert")
+            self.lang_badge.setText("📄  AUCUN FICHIER")
             self._load_project(Path(selected))
 
     def run_current(self):
