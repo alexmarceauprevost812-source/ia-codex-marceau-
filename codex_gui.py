@@ -11,7 +11,7 @@ from pathlib import Path
 
 import requests
 from PySide6.QtCore import QEasingCurve, QObject, QParallelAnimationGroup, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPen, QPixmap, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -98,6 +98,71 @@ class PythonHighlighter(QSyntaxHighlighter):
                 self.setFormat(match.start(), match.end() - match.start(), text_format)
 
 
+class ReflectionSpinner(QWidget):
+    """Gros anneau néon animé pour visualiser le moteur de réflexion."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.angle = 0
+        self.running = False
+        self.accent_color = "#39ff14"
+        self.setFixedSize(76, 76)
+
+        self.timer = QTimer(self)
+        self.timer.setInterval(24)
+        self.timer.timeout.connect(self._tick)
+
+    def set_accent_color(self, color: str):
+        self.accent_color = str(color or "#39ff14")
+        self.update()
+
+    def start(self):
+        self.running = True
+        if not self.timer.isActive():
+            self.timer.start()
+        self.update()
+
+    def stop(self):
+        self.running = False
+        self.timer.stop()
+        self.angle = 0
+        self.update()
+
+    def _tick(self):
+        self.angle = (self.angle + 8) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        accent = QColor(self.accent_color)
+        rect = QRectF(8, 8, self.width() - 16, self.height() - 16)
+
+        # Anneau de fond discret.
+        base = QColor(accent)
+        base.setAlpha(55)
+        painter.setPen(QPen(base, 5))
+        painter.drawEllipse(rect)
+
+        # Arc lumineux animé.
+        bright = QColor(accent)
+        bright.setAlpha(255)
+        painter.setPen(QPen(bright, 7))
+        if self.running:
+            painter.drawArc(rect, int(-self.angle * 16), int(110 * 16))
+        else:
+            painter.drawArc(rect, int(35 * 16), int(70 * 16))
+
+        # Petit noyau central.
+        center = QColor(accent)
+        center.setAlpha(210 if self.running else 110)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(center)
+        painter.drawEllipse(self.rect().center(), 5, 5)
+        painter.end()
+
+
 class ProjectedTitle(QWidget):
     """Titre TI-LEX avec un faisceau lumineux qui traverse les lettres."""
 
@@ -110,7 +175,7 @@ class ProjectedTitle(QWidget):
         self.accent_color = "#39ff14"
 
         self.timer = QTimer(self)
-        self.timer.setInterval(28)
+        self.timer.setInterval(20)
         self.timer.timeout.connect(self._tick)
 
         self.setMinimumWidth(420)
@@ -135,7 +200,7 @@ class ProjectedTitle(QWidget):
         self.update()
 
     def _tick(self):
-        self.offset += 9.0
+        self.offset += 12.0
         if self.offset > self.width() + 180:
             self.offset = -180.0
         self.update()
@@ -314,6 +379,8 @@ class TiLexCodexWindow(QMainWindow):
         if hasattr(self, "brand"):
             self.brand.set_font_family(self.display_font)
             self.brand.set_accent_color(self.neon_accent)
+        if hasattr(self, "reflexion_spinner"):
+            self.reflexion_spinner.set_accent_color(self.neon_accent)
         if hasattr(self, "diff_highlighter"):
             self.diff_highlighter.set_accent_color(self.neon_accent)
         self._apply_theme()
@@ -479,7 +546,12 @@ class TiLexCodexWindow(QMainWindow):
         self.btn_reopen_panel.setMaximumWidth(130)
         self.btn_reopen_panel.clicked.connect(self._reopen_right_panel)
 
+        self.reflexion_spinner = ReflectionSpinner()
+        self.reflexion_spinner.setObjectName("reflectionSpinner")
+        self.reflexion_spinner.set_accent_color(self.neon_accent)
+
         engine_layout.addWidget(self.reflexion_avatar)
+        engine_layout.addWidget(self.reflexion_spinner, 0, Qt.AlignmentFlag.AlignVCenter)
         engine_layout.addLayout(engine_text, 1)
         engine_layout.addWidget(self.engine_progress)
         engine_layout.addWidget(self.btn_reopen_panel)
@@ -830,6 +902,8 @@ class TiLexCodexWindow(QMainWindow):
         self.neon_accent = color
         if hasattr(self, "brand"):
             self.brand.set_accent_color(self.neon_accent)
+        if hasattr(self, "reflexion_spinner"):
+            self.reflexion_spinner.set_accent_color(self.neon_accent)
         if hasattr(self, "diff_highlighter"):
             self.diff_highlighter.set_accent_color(self.neon_accent)
         self._apply_theme()
@@ -1569,6 +1643,8 @@ class TiLexCodexWindow(QMainWindow):
         self.thinking_index = 0
         if not self.thinking_timer.isActive():
             self.thinking_timer.start()
+        if hasattr(self, "reflexion_spinner"):
+            self.reflexion_spinner.start()
         if hasattr(self, "brand"):
             self.brand.set_reflecting(True)
         self._animate_thinking()
@@ -1576,6 +1652,8 @@ class TiLexCodexWindow(QMainWindow):
     def _stop_thinking_animation(self):
         if self.thinking_timer.isActive():
             self.thinking_timer.stop()
+        if hasattr(self, "reflexion_spinner"):
+            self.reflexion_spinner.stop()
         if hasattr(self, "brand"):
             self.brand.set_reflecting(False)
         if hasattr(self, "engine_status"):
