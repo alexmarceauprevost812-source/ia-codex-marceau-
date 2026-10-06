@@ -106,6 +106,7 @@ class ProjectedTitle(QWidget):
         self.text = text
         self.reflecting = False
         self.offset = -180.0
+        self.font_family = "Ink Free"
 
         self.timer = QTimer(self)
         self.timer.setInterval(28)
@@ -113,6 +114,10 @@ class ProjectedTitle(QWidget):
 
         self.setMinimumWidth(420)
         self.setFixedHeight(58)
+
+    def set_font_family(self, family: str):
+        self.font_family = str(family or "Ink Free")
+        self.update()
 
     def set_reflecting(self, enabled: bool):
         self.reflecting = bool(enabled)
@@ -135,7 +140,7 @@ class ProjectedTitle(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
-        font = QFont("Ink Free")
+        font = QFont(self.font_family)
         font.setPointSize(26)
         font.setWeight(QFont.Weight.Bold)
         painter.setFont(font)
@@ -255,6 +260,7 @@ class TiLexCodexWindow(QMainWindow):
         self.last_right_panel_index = 0
         self.display_theme = "NOIR"
         self.neon_accent = "#39ff14"
+        self.display_font = "Ink Free"
         self.typewriter_timer = QTimer(self)
         self.typewriter_timer.setInterval(12)
         self.typewriter_timer.timeout.connect(self._typewriter_step)
@@ -286,6 +292,8 @@ class TiLexCodexWindow(QMainWindow):
         self.setMinimumSize(1180, 720)
 
         self._build_ui()
+        if hasattr(self, "brand"):
+            self.brand.set_font_family(self.display_font)
         self._apply_theme()
         self._apply_display_overrides()
         self._load_project(self.project_root)
@@ -335,6 +343,19 @@ class TiLexCodexWindow(QMainWindow):
             action = QAction(label, self)
             action.triggered.connect(lambda checked=False, color=value: self._set_neon_accent(color))
             neon_menu.addAction(action)
+
+        font_menu = display_menu.addMenu("Police d’écriture")
+        for label, family in (
+            ("Ink Free", "Ink Free"),
+            ("Segoe Print", "Segoe Print"),
+            ("Comic Sans MS", "Comic Sans MS"),
+            ("Cascadia Code", "Cascadia Code"),
+            ("Consolas", "Consolas"),
+            ("Arial", "Arial"),
+        ):
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked=False, font=family: self._set_display_font(font))
+            font_menu.addAction(action)
 
         self.display_button.setMenu(display_menu)
         header_layout.addWidget(self.display_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -788,9 +809,17 @@ class TiLexCodexWindow(QMainWindow):
         self._apply_theme()
         self._apply_display_overrides()
 
+    def _set_display_font(self, family: str):
+        self.display_font = str(family or "Ink Free")
+        if hasattr(self, "brand"):
+            self.brand.set_font_family(self.display_font)
+        self._apply_theme()
+        self._apply_display_overrides()
+
     def _apply_display_overrides(self):
         accent = self.neon_accent
         theme = self.display_theme
+        font = self.display_font
 
         if theme == "BLANC":
             bg = "#f4f4f4"
@@ -815,6 +844,7 @@ class TiLexCodexWindow(QMainWindow):
             QMainWindow, QWidget {{
                 background: {bg};
                 color: {text};
+                font-family: "{font}";
             }}
 
             #header, #enginePanel, #panel, #commandBar,
@@ -827,6 +857,7 @@ class TiLexCodexWindow(QMainWindow):
             #editor, #output, #diffView, #projectTree {{
                 background: {editor_bg};
                 color: {text};
+                font-family: "{font}";
             }}
 
             #sectionTitle, #subtitle, #engineFlow, #engineDetail,
