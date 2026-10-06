@@ -107,3 +107,36 @@ Le sélecteur propose 20 familles. La V1 mémorise le choix dans `~/.ti_lex_code
 ## Sécurité
 
 L'analyse et l'affichage ne modifient pas les fichiers. `-run` demande une confirmation et la V1 limite l'exécution automatique aux fichiers Python.
+
+## Interface graphique TI-LEX CODEX
+
+Une nouvelle interface PySide6 séparée du terminal est disponible sur la branche `main`.
+
+### Windows
+
+Après l'installation :
+
+```powershell
+.\start_codex_gui.bat
+```
+
+### Kali / Ubuntu
+
+```bash
+source .venv/bin/activate
+python codex_gui.py
+```
+
+Fonctions de la V1 graphique :
+
+- navigation complète à la souris
+- explorateur de projet
+- un seul fichier affiché à la fois
+- éditeur de code sombre avec coloration Python
+- boutons Lancer, Sauvegarder, Tester, Build, Ouvrir projet et Créer ZIP
+- statut Ollama et modèle local
+- console de statut
+- commande Codex en bas
+- modes AUTO, PRO et DIRECT
+- utilisation du vrai `CodexEngine`
+
