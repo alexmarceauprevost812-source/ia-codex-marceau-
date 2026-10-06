@@ -247,7 +247,7 @@ class TiLexCodexWindow(QMainWindow):
         self.reflexion_avatar = QLabel()
         self.reflexion_avatar.setObjectName("reflexionAvatar")
         self.reflexion_avatar.setAlignment(Qt.AlignCenter)
-        self.reflexion_avatar.setFixedSize(220, 140)
+        self.reflexion_avatar.setFixedSize(175, 110)
 
         demon_candidates = [
             Path(__file__).resolve().parent / "assets" / "reflexion_demon.png",
@@ -259,9 +259,17 @@ class TiLexCodexWindow(QMainWindow):
                 break
 
         if not demon_pixmap.isNull():
+            # Recadre le centre pour enlever une partie des marges noires
+            # et faire paraître TI-LEX-AL nettement plus gros dans un cadre compact.
+            crop_w = max(1, int(demon_pixmap.width() * 0.72))
+            crop_h = max(1, int(demon_pixmap.height() * 0.78))
+            crop_x = max(0, (demon_pixmap.width() - crop_w) // 2)
+            crop_y = max(0, (demon_pixmap.height() - crop_h) // 2)
+            demon_cropped = demon_pixmap.copy(crop_x, crop_y, crop_w, crop_h)
+
             self.reflexion_avatar.setPixmap(
-                demon_pixmap.scaled(
-                    205, 125,
+                demon_cropped.scaled(
+                    166, 101,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -730,7 +738,7 @@ class TiLexCodexWindow(QMainWindow):
                 color: #ff8a00;
                 border: 2px solid #ff8a00;
                 border-radius: 10px;
-                padding: 2px;
+                padding: 0px;
                 font-size: 34px;
                 font-weight: 900;
             }
