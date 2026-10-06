@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -93,6 +94,32 @@ class PythonHighlighter(QSyntaxHighlighter):
                 self.setFormat(match.start(), match.end() - match.start(), text_format)
 
 
+class DiffHighlighter(QSyntaxHighlighter):
+    """Couleurs Git diff: ajouts verts, suppressions rouges, en-têtes cyan."""
+    def __init__(self, document):
+        super().__init__(document)
+        self.added = QTextCharFormat()
+        self.added.setForeground(QColor("#39ff14"))
+        self.removed = QTextCharFormat()
+        self.removed.setForeground(QColor("#ff5252"))
+        self.header = QTextCharFormat()
+        self.header.setForeground(QColor("#00efff"))
+        self.header.setFontWeight(QFont.Bold)
+        self.file = QTextCharFormat()
+        self.file.setForeground(QColor("#ff9d21"))
+        self.file.setFontWeight(QFont.Bold)
+
+    def highlightBlock(self, text: str):
+        if text.startswith("+++ ") or text.startswith("--- ") or text.startswith("@@"):
+            self.setFormat(0, len(text), self.header)
+        elif text.startswith("+") and not text.startswith("+++"):
+            self.setFormat(0, len(text), self.added)
+        elif text.startswith("-") and not text.startswith("---"):
+            self.setFormat(0, len(text), self.removed)
+        elif text.startswith("FILE "):
+            self.setFormat(0, len(text), self.file)
+
+
 class CodexWorker(QObject):
     status = Signal(str)
     finished = Signal(object)
@@ -112,7 +139,14 @@ class CodexWorker(QObject):
                 status=lambda msg: self.status.emit(str(msg)),
             )
             result = engine.build(self.request)
-            self.finished.emit((result, dict(engine.last_outputs)))
+            self.finished.emit((
+                result,
+                {
+                    "outputs": dict(engine.last_outputs),
+                    "stats": dict(engine.last_stats_by_file),
+                    "diffs": dict(engine.last_diffs),
+                },
+            ))
         except BaseException as exc:
             # Empêche une erreur du moteur de tuer toute l'interface graphique.
             try:
@@ -219,6 +253,7 @@ class TiLexCodexWindow(QMainWindow):
 
         # ===== MAIN AREA =====
         main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter = main_splitter
         main_splitter.setChildrenCollapsible(False)
         main_splitter.setHandleWidth(4)
 
@@ -280,15 +315,46 @@ class TiLexCodexWindow(QMainWindow):
         self.highlighter = PythonHighlighter(self.editor.document())
         center_layout.addWidget(self.editor, 1)
 
-        # RIGHT
-        right = QFrame(objectName="panel")
-        right_layout = QVBoxLayout(right)
+        # RIGHT - panneaux Codex repliables
+        self.right_panel = QFrame(objectName="panel")
+        right_layout = QVBoxLayout(self.right_panel)
         right_layout.setContentsMargins(8, 8, 8, 8)
         right_layout.setSpacing(7)
 
-        tools_title = QLabel("🔧  OUTILS")
+        right_tabs = QHBoxLayout()
+        right_tabs.setSpacing(5)
+
+        self.btn_panel_tools = QPushButton("1  OUTILS")
+        self.btn_panel_tools.setObjectName("panelTabButton")
+        self.btn_panel_tools.clicked.connect(lambda: self._show_right_panel(0))
+
+        self.btn_panel_results = QPushButton("2  RÉSULTATS")
+        self.btn_panel_results.setObjectName("panelTabButton")
+        self.btn_panel_results.clicked.connect(lambda: self._show_right_panel(1))
+
+        self.btn_panel_close = QPushButton("✕")
+        self.btn_panel_close.setObjectName("panelCloseButton")
+        self.btn_panel_close.setMaximumWidth(42)
+        self.btn_panel_close.clicked.connect(self._close_right_panel)
+
+        right_tabs.addWidget(self.btn_panel_tools)
+        right_tabs.addWidget(self.btn_panel_results)
+        right_tabs.addStretch(1)
+        right_tabs.addWidget(self.btn_panel_close)
+        right_layout.addLayout(right_tabs)
+
+        self.right_stack = QStackedWidget()
+        self.right_stack.setObjectName("rightStack")
+
+        # Panneau 1 - outils + sortie
+        tools_page = QWidget()
+        tools_layout = QVBoxLayout(tools_page)
+        tools_layout.setContentsMargins(0, 0, 0, 0)
+        tools_layout.setSpacing(7)
+
+        tools_title = QLabel("🔧  PANNEAU 1 • OUTILS")
         tools_title.setObjectName("sectionTitle")
-        right_layout.addWidget(tools_title)
+        tools_layout.addWidget(tools_title)
 
         self.btn_run = self._tool_button("▶  Lancer                         F5", self.run_current)
         self.btn_save = self._tool_button("💾  Sauvegarder              Ctrl+S", self.save_current)
@@ -301,27 +367,56 @@ class TiLexCodexWindow(QMainWindow):
             self.btn_run, self.btn_save, self.btn_test,
             self.btn_build, self.btn_open, self.btn_zip
         ):
-            right_layout.addWidget(btn)
+            tools_layout.addWidget(btn)
 
         status_title = QLabel("🖥  STATUT / SORTIE")
         status_title.setObjectName("sectionTitle")
-        right_layout.addWidget(status_title)
+        tools_layout.addWidget(status_title)
 
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
         self.output.setObjectName("output")
         self.output.setMaximumBlockCount(1000)
         self.output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        right_layout.addWidget(self.output, 1)
+        tools_layout.addWidget(self.output, 1)
 
         clear_btn = QPushButton("🗑  Effacer")
         clear_btn.setObjectName("clearButton")
         clear_btn.clicked.connect(self.output.clear)
-        right_layout.addWidget(clear_btn)
+        tools_layout.addWidget(clear_btn)
+
+        # Panneau 2 - résultats / diff réel
+        results_page = QWidget()
+        results_layout = QVBoxLayout(results_page)
+        results_layout.setContentsMargins(0, 0, 0, 0)
+        results_layout.setSpacing(7)
+
+        results_title = QLabel("±  PANNEAU 2 • RÉSULTATS CODEX")
+        results_title.setObjectName("sectionTitle")
+        results_layout.addWidget(results_title)
+
+        self.results_summary = QLabel("Aucune modification pour le moment.")
+        self.results_summary.setObjectName("resultsSummary")
+        self.results_summary.setWordWrap(True)
+        results_layout.addWidget(self.results_summary)
+
+        self.diff_view = QPlainTextEdit()
+        self.diff_view.setObjectName("diffView")
+        self.diff_view.setReadOnly(True)
+        self.diff_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.diff_view.setPlaceholderText(
+            "Les lignes ajoutées (+) et supprimées (-) apparaîtront ici après une commande CODEX."
+        )
+        self.diff_highlighter = DiffHighlighter(self.diff_view.document())
+        results_layout.addWidget(self.diff_view, 1)
+
+        self.right_stack.addWidget(tools_page)
+        self.right_stack.addWidget(results_page)
+        right_layout.addWidget(self.right_stack, 1)
 
         main_splitter.addWidget(left)
         main_splitter.addWidget(center)
-        main_splitter.addWidget(right)
+        main_splitter.addWidget(self.right_panel)
         main_splitter.setStretchFactor(0, 2)
         main_splitter.setStretchFactor(1, 7)
         main_splitter.setStretchFactor(2, 3)
@@ -366,11 +461,84 @@ class TiLexCodexWindow(QMainWindow):
         root_layout.addWidget(bottom)
         self.setCentralWidget(root)
 
+        self._show_right_panel(0)
+
         self.btn_save.setShortcut(QKeySequence("Ctrl+S"))
         self.btn_run.setShortcut(QKeySequence("F5"))
         self.btn_test.setShortcut(QKeySequence("Ctrl+T"))
         self.btn_build.setShortcut(QKeySequence("Ctrl+B"))
         self.btn_open.setShortcut(QKeySequence("Ctrl+O"))
+
+    def _show_right_panel(self, index: int):
+        if not self.right_panel.isVisible():
+            self.right_panel.show()
+            self.main_splitter.setSizes([270, 1030, 380])
+
+        if self.right_stack.currentIndex() == index and self.right_panel.isVisible():
+            self.right_stack.setCurrentIndex(index)
+        else:
+            self.right_stack.setCurrentIndex(index)
+
+        self.btn_panel_tools.setProperty("active", index == 0)
+        self.btn_panel_results.setProperty("active", index == 1)
+        self.btn_panel_tools.style().unpolish(self.btn_panel_tools)
+        self.btn_panel_tools.style().polish(self.btn_panel_tools)
+        self.btn_panel_results.style().unpolish(self.btn_panel_results)
+        self.btn_panel_results.style().polish(self.btn_panel_results)
+
+    def _close_right_panel(self):
+        self.right_panel.hide()
+
+    def _render_codex_results(self, data: dict, changed: list[str]):
+        stats = data.get("stats", {}) if isinstance(data, dict) else {}
+        diffs = data.get("diffs", {}) if isinstance(data, dict) else {}
+
+        if not changed:
+            self.results_summary.setText("Aucun fichier modifié.")
+            self.diff_view.setPlainText("")
+            return
+
+        total_added = 0
+        total_removed = 0
+        blocks = []
+
+        for rel in changed:
+            if rel.lower() == "readme.md" and rel not in diffs:
+                continue
+
+            file_stats = stats.get(rel, {})
+            added = int(file_stats.get("added", 0) or 0)
+            removed = int(file_stats.get("deleted", 0) or 0)
+            modified = int(file_stats.get("modified", 0) or 0)
+            total_added += added
+            total_removed += removed
+
+            blocks.append(
+                f"FILE {rel}    +{added}  -{removed}  ~{modified}"
+            )
+
+            raw_diff = str(diffs.get(rel, "") or "")
+            if raw_diff:
+                # Affiche uniquement les en-têtes et les vraies lignes + / -.
+                for line in raw_diff.splitlines():
+                    if (
+                        line.startswith("+++ ")
+                        or line.startswith("--- ")
+                        or line.startswith("@@")
+                        or (line.startswith("+") and not line.startswith("+++"))
+                        or (line.startswith("-") and not line.startswith("---"))
+                    ):
+                        blocks.append(line)
+            else:
+                blocks.append("(diff détaillé non disponible)")
+            blocks.append("")
+
+        self.results_summary.setText(
+            f"{len(changed)} fichier(s) touché(s)  •  "
+            f"+{total_added} ligne(s)  •  -{total_removed} ligne(s)"
+        )
+        self.diff_view.setPlainText("\n".join(blocks).rstrip())
+        self._show_right_panel(1)
 
     def _tool_button(self, text: str, callback):
         btn = QPushButton(text)
@@ -386,6 +554,53 @@ class TiLexCodexWindow(QMainWindow):
                 color: #efffff;
                 font-family: "Ink Free", "Segoe Print", "Comic Sans MS";
                 font-size: 14px;
+            }
+
+            #panelTabButton {
+                background: #050505;
+                color: #baff64;
+                border: 1px solid #00d9cc;
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-weight: 900;
+            }
+
+            #panelTabButton[active="true"] {
+                background: #102000;
+                color: #ffffff;
+                border: 2px solid #39ff14;
+            }
+
+            #panelTabButton:hover {
+                border-color: #39ff14;
+                color: #ffffff;
+            }
+
+            #panelCloseButton {
+                background: #170000;
+                color: #ff6666;
+                border: 1px solid #ff5252;
+                border-radius: 6px;
+                font-weight: 900;
+            }
+
+            #resultsSummary {
+                background: #030303;
+                color: #ffb347;
+                border: 1px solid #ff8200;
+                border-radius: 6px;
+                padding: 7px;
+                font-weight: 800;
+            }
+
+            #diffView {
+                background: #000000;
+                color: #dff;
+                border: 1px solid #00d9cc;
+                border-radius: 7px;
+                padding: 7px;
+                font-family: "Cascadia Code", "Consolas", monospace;
+                font-size: 12px;
             }
 
             #enginePanel {
@@ -1203,7 +1418,8 @@ class TiLexCodexWindow(QMainWindow):
 
     def _codex_finished(self, payload):
         try:
-            result, outputs = payload
+            result, run_data = payload
+            outputs = run_data.get("outputs", {}) if isinstance(run_data, dict) else {}
             self.prompt.setEnabled(True)
             self._set_tools_enabled(True)
 
@@ -1223,6 +1439,8 @@ class TiLexCodexWindow(QMainWindow):
             )
             if readme_changed and readme_changed not in changed:
                 changed.append(readme_changed)
+
+            self._render_codex_results(run_data, changed)
 
             # Le rafraîchissement du projet ne doit jamais fermer l'interface.
             try:
