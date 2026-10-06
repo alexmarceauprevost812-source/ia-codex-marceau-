@@ -6,6 +6,7 @@ import zipfile
 import shutil
 import sys
 import time
+import traceback
 import requests
 from concurrent.futures import ThreadPoolExecutor
 
@@ -1090,6 +1091,21 @@ class CodexLocalApp(App):
         self._render_chat(self._chat_typing_text[:self._chat_typing_pos])
 
 
+    def _record_ui_error(self, error, details=""):
+        """Conserve toute erreur UI/worker dans le projet actif."""
+        try:
+            state_dir = self.root / ".tilex"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            message = (
+                "TI-LEX CODEX UI ERROR\n"
+                f"Projet: {self.root}\n"
+                f"Erreur: {error}\n"
+                f"Détails:\n{details}\n"
+            )
+            (state_dir / "ui_error.txt").write_text(message, encoding="utf-8")
+        except Exception:
+            pass
+
     def _build_in_background(self, request):
         try:
             engine = CodexEngine(
@@ -1100,11 +1116,24 @@ class CodexLocalApp(App):
             result = engine.build(request)
             self.call_from_thread(self._finish_build, result, engine.last_outputs, engine.last_stats_by_file)
         except Exception as exc:
-            self.call_from_thread(self._finish_build_error, str(exc))
+            details = traceback.format_exc()
+            self._record_ui_error(str(exc), details)
+            self.call_from_thread(
+                self._finish_build_error,
+                f"{type(exc).__name__}: {exc} • projet: {self.root}",
+            )
 
     def _finish_build_error(self, error):
         self._stop_work_status()
-        self.notify("Erreur moteur CODEX: " + error, severity="error")
+        message = "❌ ERREUR CODEX • " + str(error)
+        self._record_ui_error(str(error))
+        self.query_one("#editor_title", Static).update(message)
+        try:
+            log = self.query_one("#chat_log", RichLog)
+            log.write(Text(message, style="bold #FF1744"))
+        except Exception:
+            pass
+        self.notify(message, severity="error", timeout=12)
         self.query_one("#user_input", Input).focus()
         self._run_next_codex_command()
 
@@ -1112,6 +1141,15 @@ class CodexLocalApp(App):
         self._stop_work_status()
         self.notify(result.message, severity="information" if result.ok else "error")
         if not result.ok:
+            message = "❌ " + str(result.message)
+            self._record_ui_error(str(result.message))
+            self.query_one("#editor_title", Static).update(message)
+            try:
+                self.query_one("#chat_log", RichLog).write(
+                    Text(message, style="bold #FF1744")
+                )
+            except Exception:
+                pass
             self.query_one("#user_input", Input).focus()
             self._run_next_codex_command()
             return
