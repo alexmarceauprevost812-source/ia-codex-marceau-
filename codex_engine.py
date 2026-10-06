@@ -572,6 +572,97 @@ Règles:
         self.status(f"✅ PATCH RAPIDE appliqué • {target}")
         return updated
 
+    def generate_fast_task(self, request: str, task: dict) -> list[dict]:
+        """Mode FAST: un seul appel Qwen maximum, sans planification ni réparation IA."""
+        targets = [str(x) for x in task.get("files", [])][:1]
+        if not targets:
+            raise ValueError("FAST: aucun fichier cible.")
+        target = targets[0]
+        target_path = self._safe(target)
+        old_content = (
+            target_path.read_text(encoding="utf-8", errors="replace")
+            if target_path.is_file() else ""
+        )
+
+        # Modification d'un fichier existant: un seul appel JSON de remplacement.
+        if old_content and len(old_content) <= 6500:
+            prompt = f"""TI-LEX FAST. Modifie immédiatement ce fichier.
+
+Fichier: {target}
+Demande: {request}
+
+CONTENU:
+{old_content}
+
+Réponds UNIQUEMENT en JSON valide:
+{{"replacements":[{{"old":"texte exact existant","new":"nouveau texte"}}]}}
+
+Règles:
+- maximum 4 remplacements;
+- old doit être copié exactement du fichier;
+- aucune explication;
+- ne renvoie pas le fichier complet."""
+            self.status(f"⚡ FAST • modification immédiate • {target}")
+            payload = self._json(
+                self._ask(
+                    prompt,
+                    temperature=0.05,
+                    json_mode=True,
+                    num_predict=360,
+                    read_timeout=40,
+                )
+            )
+            replacements = payload.get("replacements", []) if isinstance(payload, dict) else []
+            if not isinstance(replacements, list) or not replacements or len(replacements) > 4:
+                raise ValueError("FAST: Qwen n'a pas produit de modification applicable.")
+
+            updated = old_content
+            for item in replacements:
+                if not isinstance(item, dict):
+                    raise ValueError("FAST: patch invalide.")
+                old = str(item.get("old", ""))
+                new = str(item.get("new", ""))
+                if not old or updated.count(old) != 1:
+                    raise ValueError("FAST: zone de remplacement ambiguë ou absente.")
+                updated = updated.replace(old, new, 1)
+
+            valid, error = self._validate_generated_content(target, updated)
+            if not valid:
+                raise ValueError(f"FAST: résultat refusé par validation: {error}")
+            return [{"path": target, "content": updated}]
+
+        # Nouveau ou gros fichier: un seul appel direct, contexte limité au fichier cible.
+        context = ""
+        if old_content:
+            context = old_content[:5000]
+
+        prompt = f"""TI-LEX FAST. Réponds directement avec le fichier final complet.
+
+Fichier: {target}
+Demande: {request}
+Contenu actuel:
+{context or "(nouveau fichier)"}
+
+Retourne uniquement le contenu brut final du fichier, sans Markdown ni explication.
+Respecte le langage de l'extension et conserve le code utile existant."""
+        self.status(f"⚡ FAST • génération immédiate • {target}")
+        content = self._clean_model_output(
+            self._ask(
+                prompt,
+                temperature=0.08,
+                num_predict=1200,
+                read_timeout=90,
+            )
+        )
+        if not content:
+            raise ValueError("FAST: réponse vide.")
+
+        valid, error = self._validate_generated_content(target, content)
+        if not valid:
+            raise ValueError(f"FAST: résultat refusé par validation: {error}")
+
+        return [{"path": target, "content": content}]
+
     def generate_task(self, request: str, task: dict) -> list[dict]:
         targets = [str(x) for x in task.get("files", [])][:1]
         if not targets:
@@ -747,7 +838,7 @@ cd ia-codex-marceau-
                 raise ValueError("Commande vide après sélection du mode.")
 
             self.status(
-                "⚡ MODE FAST • réponse directe" if mode == "FAST"
+                "⚡ MODE FAST INSTANT • 1 appel Qwen maximum" if mode == "FAST"
                 else "🧠 MODE PRO • analyse approfondie"
             )
 
@@ -788,7 +879,10 @@ cd ia-codex-marceau-
                 self.status(f"⚙ {task_id} • {task.get('goal', 'génération')} ({index}/{len(tasks)})")
                 target_names = ", ".join(str(x) for x in task.get("files", [])[:1]) or "fichier"
                 self.status(f"🎯 Fichier choisi • {target_names}")
-                items = self.generate_task(request, task)
+                if str(plan.get("mode") or "").upper() == "FAST":
+                    items = self.generate_fast_task(request, task)
+                else:
+                    items = self.generate_task(request, task)
                 self.status(f"💾 Sauvegarde • {target_names}")
                 changed.extend(self.apply_files(items))
             report = {
