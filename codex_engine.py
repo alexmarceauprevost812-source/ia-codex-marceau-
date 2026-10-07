@@ -36,14 +36,18 @@ class CodexEngine:
     def __init__(self, root: Path, model: str = "qwen2.5:7b",
                  endpoint: str = "http://127.0.0.1:11434",
                  status: Callable[[str], None] | None = None,
-                 provider: str = "OLLAMA"):
+                 provider: str = "OLLAMA",
+                 anthropic_model: str | None = None):
         self.root = Path(root).resolve()
         self.model = model
         self.endpoint = endpoint.rstrip("/")
         self.status = status or (lambda _msg: None)
         self.provider = str(provider or "OLLAMA").upper()
         self.secret_store = SecretStore()
-        self.anthropic_model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+        self.anthropic_model = str(
+            anthropic_model
+            or os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+        ).strip()
         self.openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.5")
         self.perplexity_model = os.environ.get("PERPLEXITY_MODEL", "sonar-pro")
         self.deepseek_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
