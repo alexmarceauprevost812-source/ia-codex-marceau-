@@ -586,21 +586,45 @@ RÈGLES README OBLIGATOIRES:
 - Vérifie les vrais noms de fichiers du projet avant d’écrire une commande de lancement.
 """
 
-    @staticmethod
-    def _validate_readme_command_blocks(content: str) -> tuple[bool, str]:
-        """Empêche une arborescence décorative d’être présentée comme commande terminal."""
-        command_fence = re.compile(
-            r"```(?:powershell|ps1|bash|sh|shell|cmd|bat)\s*\n([\s\S]*?)```",
+    def _validate_readme_command_blocks(self, content: str) -> tuple[bool, str]:
+        """Valide les blocs copiables d’un README selon leur shell réel."""
+        fence = re.compile(
+            r"```(powershell|ps1|bash|sh|shell|cmd|bat)\s*\n([\s\S]*?)```",
             re.IGNORECASE,
         )
         tree_line = re.compile(r"^\s*[├└│┌┬┼─]+")
-        for block in command_fence.findall(content or ""):
+        facts = self._project_facts()
+        known = {str(x).replace("\\", "/") for x in facts["files"]}
+
+        for language, block in fence.findall(content or ""):
+            lang = language.lower()
             for line in block.splitlines():
                 if tree_line.match(line):
-                    return (
-                        False,
-                        "README invalide: une ligne d’arborescence (├──/└──/│) se trouve dans un bloc de commandes. Déplace l’arborescence dans un bloc text et garde uniquement de vraies commandes dans PowerShell/Bash.",
-                    )
+                    return False, "README invalide: arborescence placée dans un bloc de commandes."
+
+            if lang in {"powershell", "ps1"}:
+                if re.search(r"(?mi)^\s*(?:sudo\s+)?apt(?:-get)?\s+", block):
+                    return False, "README invalide: commande apt Linux dans un bloc PowerShell."
+                if re.search(r"(?mi)^\s*chmod\s+", block):
+                    return False, "README invalide: commande chmod Linux dans un bloc PowerShell."
+
+            if lang in {"bash", "sh", "shell"}:
+                if re.search(r"(?mi)^\s*(Get-ChildItem|Copy-Item|Set-Location|Write-Host|New-Item)\b", block):
+                    return False, "README invalide: commande PowerShell dans un bloc Bash/Linux."
+                if re.search(r"(?mi)^\s*\.\\[A-Za-z0-9_.-]+", block):
+                    return False, "README invalide: syntaxe .\\ PowerShell dans un bloc Bash/Linux."
+
+            if not facts["has_package_json"] and re.search(r"(?mi)^\s*npm\s+(?:install|start|run)\b", block):
+                return False, "README invalide: npm proposé alors que package.json est absent."
+
+            for match in re.finditer(
+                r"(?mi)^\s*(?:python3?|py)\s+(?:\.\\|\./)?([A-Za-z0-9_./\\-]+\.py)\b",
+                block,
+            ):
+                rel = match.group(1).replace("\\", "/").lstrip("./")
+                if rel not in known and not (self.root / rel).is_file():
+                    return False, f"README invalide: la commande lance {rel}, mais ce fichier n’existe pas."
+
         return True, ""
 
     def _validate_generated_content(self, target: str, content: str):
