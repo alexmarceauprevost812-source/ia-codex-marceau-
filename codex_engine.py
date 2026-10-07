@@ -311,6 +311,17 @@ class CodexEngine:
         if any(word in lower for word in complex_words):
             return "PRO", raw
 
+        # Les commandes système et la documentation d’installation demandent plus de vérification.
+        environment_words = (
+            "readme", "readme.md", "installation", "installer", "installe",
+            "commande", "commandes", "terminal", "powershell", "power shell",
+            "windows", "kali", "linux", "ubuntu", "bash", "shell", "wsl",
+            "compatible", "compatibilité", "compatibilite", "lancer", "démarrer",
+            "demarrer", "git clone", "npm install", "pip install", "apt install",
+        )
+        if any(word in lower for word in environment_words):
+            return "PRO", raw
+
         # Une demande longue avec plusieurs actions est plus sûre en PRO.
         action_markers = sum(
             lower.count(word)
