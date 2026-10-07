@@ -51,6 +51,14 @@ class CodexEngine:
         self.openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.5")
         self.perplexity_model = os.environ.get("PERPLEXITY_MODEL", "sonar-pro")
         self.deepseek_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
+        self.deepseek_base_url = os.environ.get(
+            "DEEPSEEK_BASE_URL", "https://api.deepseek.com"
+        ).rstrip("/")
+        self.deepseek_reasoning_effort = os.environ.get(
+            "DEEPSEEK_REASONING_EFFORT", "high"
+        ).strip().lower()
+        if self.deepseek_reasoning_effort not in {"none", "low", "high", "max"}:
+            self.deepseek_reasoning_effort = "high"
         self.gemini_model = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
         self.last_file = None
         self.last_content = ""
@@ -141,12 +149,8 @@ class CodexEngine:
                 read_timeout=read_timeout,
             )
         if self.provider == "DEEPSEEK":
-            return self._ask_openai_compatible(
-                provider="deepseek",
-                label="DEEPSEEK",
-                endpoint="https://api.deepseek.com/chat/completions",
-                model=self.deepseek_model,
-                prompt=prompt,
+            return self._ask_deepseek(
+                prompt,
                 temperature=temperature,
                 num_predict=num_predict,
                 read_timeout=read_timeout,
@@ -304,6 +308,75 @@ class CodexEngine:
 
         if not answer:
             raise RuntimeError("ChatGPT a retourné une réponse vide.")
+        return answer
+
+    def _ask_deepseek(
+        self,
+        prompt: str,
+        temperature: float = 0.15,
+        num_predict: int = 1800,
+        read_timeout: int = 150,
+    ) -> str:
+        """Appelle DeepSeek avec le mode réflexion officiel, sans exposer le raisonnement interne."""
+        api_key = self.secret_store.get_api_key("deepseek")
+        if not api_key:
+            raise RuntimeError(
+                "Clé DeepSeek absente. Utilise le menu CLÉS API en haut à droite."
+            )
+
+        effort = self.deepseek_reasoning_effort
+        thinking_enabled = effort != "none"
+        mode_label = f"réflexion {effort}" if thinking_enabled else "réflexion désactivée"
+        self.status(f"🧠 DEEPSEEK • {self.deepseek_model} • {mode_label}")
+
+        payload = {
+            "model": self.deepseek_model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Tu es TI-LEX CODEX / Codex Marceau, un assistant de programmation. "
+                        "Réponds avec le résultat utile demandé, sans exposer ton raisonnement interne."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+            "max_tokens": int(max(64, num_predict)),
+            "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
+            "reasoning_effort": effort,
+        }
+        # La documentation DeepSeek indique que temperature n'a pas d'effet
+        # quand le mode thinking est actif. On ne l'envoie qu'en mode normal.
+        if not thinking_enabled:
+            payload["temperature"] = float(temperature)
+
+        response = requests.post(
+            self.deepseek_base_url + "/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=(10, read_timeout),
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = response.text.strip()
+            raise RuntimeError(
+                f"DEEPSEEK HTTP {response.status_code}: {body or exc}"
+            ) from exc
+
+        data = response.json()
+        try:
+            message = data["choices"][0]["message"]
+            answer = str(message.get("content") or "").strip()
+        except (KeyError, IndexError, TypeError, AttributeError):
+            answer = ""
+
+        if not answer:
+            raise RuntimeError("DeepSeek a retourné une réponse finale vide.")
         return answer
 
     def _ask_openai_compatible(
