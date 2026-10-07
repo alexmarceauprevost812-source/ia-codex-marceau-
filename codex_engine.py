@@ -44,6 +44,7 @@ class CodexEngine:
         self.provider = str(provider or "OLLAMA").upper()
         self.secret_store = SecretStore()
         self.anthropic_model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+        self.openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.5")
         self.last_file = None
         self.last_content = ""
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
@@ -112,6 +113,14 @@ class CodexEngine:
                 temperature=temperature,
                 num_predict=num_predict,
                 read_timeout=read_timeout,
+            )
+        if self.provider in {"OPENAI", "OPENAI_WEB"}:
+            return self._ask_openai(
+                prompt,
+                temperature=temperature,
+                num_predict=num_predict,
+                read_timeout=read_timeout,
+                web_search=self.provider == "OPENAI_WEB",
             )
 
         active_model = self._resolve_model()
@@ -199,6 +208,66 @@ class CodexEngine:
         answer = "\n".join(part for part in parts if part).strip()
         if not answer:
             raise RuntimeError("Claude a retourné une réponse vide.")
+        return answer
+
+    def _ask_openai(
+        self,
+        prompt: str,
+        temperature: float = 0.15,
+        num_predict: int = 1800,
+        read_timeout: int = 150,
+        web_search: bool = False,
+    ) -> str:
+        api_key = self.secret_store.get_api_key("openai")
+        if not api_key:
+            raise RuntimeError(
+                "Clé OpenAI absente. Utilise le menu CLÉS API en haut à droite."
+            )
+
+        label = "CHATGPT + INTERNET" if web_search else "CHATGPT"
+        self.status(f"🌐 {label} • {self.openai_model}")
+
+        payload = {
+            "model": self.openai_model,
+            "input": prompt,
+            "max_output_tokens": int(max(64, num_predict)),
+        }
+        if web_search:
+            payload["tools"] = [{"type": "web_search"}]
+
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=(10, read_timeout),
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = response.text.strip()
+            raise RuntimeError(
+                f"OpenAI HTTP {response.status_code}: {body or exc}"
+            ) from exc
+
+        data = response.json()
+        answer = str(data.get("output_text") or "").strip()
+        if not answer:
+            parts = []
+            for item in data.get("output", []):
+                if not isinstance(item, dict) or item.get("type") != "message":
+                    continue
+                for block in item.get("content", []):
+                    if isinstance(block, dict) and block.get("type") in {"output_text", "text"}:
+                        text_value = block.get("text")
+                        if text_value:
+                            parts.append(str(text_value))
+            answer = "\n".join(parts).strip()
+
+        if not answer:
+            raise RuntimeError("ChatGPT a retourné une réponse vide.")
         return answer
 
     def _control_review(self, target: str, request: str, content: str) -> str:
