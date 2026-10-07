@@ -297,12 +297,14 @@ class CodexWorker(QObject):
     finished = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, root: Path, request: str, model: str, provider: str = "OLLAMA"):
+    def __init__(self, root: Path, request: str, model: str, provider: str = "OLLAMA",
+                 anthropic_model: str | None = None):
         super().__init__()
         self.root = root
         self.request = request
         self.model = model
         self.provider = str(provider or "OLLAMA").upper()
+        self.anthropic_model = anthropic_model
 
     def run(self):
         try:
@@ -311,6 +313,7 @@ class CodexWorker(QObject):
                 model=self.model,
                 status=lambda msg: self.status.emit(str(msg)),
                 provider=self.provider,
+                anthropic_model=self.anthropic_model,
             )
             if self.request.strip().lower().startswith("/chat"):
                 result = engine.chat(self.request)
@@ -356,6 +359,7 @@ class TiLexCodexWindow(QMainWindow):
         self.neon_accent = "#39ff14"
         self.display_font = "Ink Free"
         self.agent_provider = "OLLAMA"
+        self.anthropic_model = "claude-sonnet-5-5"
         self.secret_store = SecretStore()
         self.typewriter_timer = QTimer(self)
         self.typewriter_timer.setInterval(12)
@@ -488,10 +492,40 @@ class TiLexCodexWindow(QMainWindow):
 
         agent_menu = QMenu(self.agent_button)
         agent_menu.setObjectName("agentMenu")
+
+        ollama_action = QAction("OLLAMA LOCAL", self)
+        ollama_action.triggered.connect(
+            lambda checked=False: self._set_agent_provider("OLLAMA", "OLLAMA LOCAL")
+        )
+        agent_menu.addAction(ollama_action)
+
+        claude_models = (
+            ("HAIKU 5.5", "claude-haiku-5-5"),
+            ("SONNET 5", "claude-sonnet-5"),
+            ("SONNET 5.5", "claude-sonnet-5-5"),
+            ("OPUS 4.8", "claude-opus-4-8"),
+            ("OPUS 5", "claude-opus-5"),
+        )
+
+        claude_menu = agent_menu.addMenu("CLAUDE")
+        for model_label, model_id in claude_models:
+            action = QAction(model_label, self)
+            action.triggered.connect(
+                lambda checked=False, m=model_id, name=model_label:
+                    self._set_claude_agent("CLAUDE", m, name)
+            )
+            claude_menu.addAction(action)
+
+        claude_control_menu = agent_menu.addMenu("CLAUDE + CONTRÔLE")
+        for model_label, model_id in claude_models:
+            action = QAction(model_label, self)
+            action.triggered.connect(
+                lambda checked=False, m=model_id, name=model_label:
+                    self._set_claude_agent("CLAUDE_CONTROL", m, name)
+            )
+            claude_control_menu.addAction(action)
+
         for label, provider in (
-            ("OLLAMA LOCAL", "OLLAMA"),
-            ("CLAUDE", "CLAUDE"),
-            ("CLAUDE + CONTRÔLE", "CLAUDE_CONTROL"),
             ("CHATGPT", "OPENAI"),
             ("CHATGPT + INTERNET", "OPENAI_WEB"),
             ("PERPLEXITY", "PERPLEXITY"),
@@ -2302,6 +2336,16 @@ class TiLexCodexWindow(QMainWindow):
         self.agent_button.setText(f"🤖  AGENT : {label}")
         self._log(f"Agent sélectionné : {label}", "INFO")
 
+    def _set_claude_agent(self, provider: str, model_id: str, model_label: str):
+        self.agent_provider = str(provider or "CLAUDE").upper()
+        self.anthropic_model = str(model_id or "claude-sonnet-5-5")
+        prefix = "CLAUDE + CONTRÔLE" if self.agent_provider == "CLAUDE_CONTROL" else "CLAUDE"
+        self.agent_button.setText(f"🤖  AGENT : {prefix} / {model_label}")
+        self._log(
+            f"Agent sélectionné : {prefix} • modèle {model_label} ({self.anthropic_model})",
+            "INFO",
+        )
+
     def _save_api_key(self, provider: str, label: str):
         try:
             value, ok = QInputDialog.getText(
@@ -2418,6 +2462,7 @@ class TiLexCodexWindow(QMainWindow):
                 request,
                 self.config.get("model", "qwen2.5:7b"),
                 self.agent_provider,
+                self.anthropic_model,
             )
             worker.moveToThread(thread)
 
