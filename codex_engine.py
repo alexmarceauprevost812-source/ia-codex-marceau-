@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import difflib
 import ast
 import re
@@ -12,6 +13,8 @@ from pathlib import Path
 from typing import Callable
 
 import requests
+
+from secret_store import SecretStore
 
 IGNORE_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".tilex"}
 TEXT_EXTENSIONS = {
@@ -32,11 +35,15 @@ class CodexEngine:
 
     def __init__(self, root: Path, model: str = "qwen2.5:7b",
                  endpoint: str = "http://127.0.0.1:11434",
-                 status: Callable[[str], None] | None = None):
+                 status: Callable[[str], None] | None = None,
+                 provider: str = "OLLAMA"):
         self.root = Path(root).resolve()
         self.model = model
         self.endpoint = endpoint.rstrip("/")
         self.status = status or (lambda _msg: None)
+        self.provider = str(provider or "OLLAMA").upper()
+        self.secret_store = SecretStore()
+        self.anthropic_model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         self.last_file = None
         self.last_content = ""
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
@@ -94,14 +101,20 @@ class CodexEngine:
         num_predict: int | None = None,
         read_timeout: int | None = None,
     ) -> str:
-        # Les petits appels JSON (plan/patch) doivent rester très courts.
         if num_predict is None:
             num_predict = 512 if json_mode else 1800
         if read_timeout is None:
             read_timeout = 60 if json_mode else 150
 
-        active_model = self._resolve_model()
+        if self.provider in {"CLAUDE", "CLAUDE_CONTROL"}:
+            return self._ask_anthropic(
+                prompt,
+                temperature=temperature,
+                num_predict=num_predict,
+                read_timeout=read_timeout,
+            )
 
+        active_model = self._resolve_model()
         payload = {
             "model": active_model,
             "prompt": prompt,
@@ -136,6 +149,123 @@ class CodexEngine:
         if not answer:
             raise RuntimeError(f"Ollama ({active_model}) a retourné une réponse vide.")
         return answer
+
+    def _ask_anthropic(
+        self,
+        prompt: str,
+        temperature: float = 0.15,
+        num_predict: int = 1800,
+        read_timeout: int = 150,
+    ) -> str:
+        api_key = self.secret_store.get_api_key("anthropic")
+        if not api_key:
+            raise RuntimeError(
+                "Clé Anthropic absente. Utilise le menu CLÉS API en haut à droite."
+            )
+
+        self.status(f"☁ CLAUDE • {self.anthropic_model}")
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": self.anthropic_model,
+                "max_tokens": int(max(64, num_predict)),
+                "temperature": float(temperature),
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+            },
+            timeout=(10, read_timeout),
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = response.text.strip()
+            raise RuntimeError(
+                f"Anthropic HTTP {response.status_code}: {body or exc}"
+            ) from exc
+
+        data = response.json()
+        blocks = data.get("content", [])
+        parts = [
+            str(block.get("text", ""))
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        answer = "\n".join(part for part in parts if part).strip()
+        if not answer:
+            raise RuntimeError("Claude a retourné une réponse vide.")
+        return answer
+
+    def _control_review(self, target: str, request: str, content: str) -> str:
+        """Deuxième passage Claude avant écriture quand CLAUDE + CONTRÔLE est actif."""
+        if self.provider != "CLAUDE_CONTROL":
+            return content
+
+        self.status(f"🛡 CLAUDE CONTRÔLE • {target}")
+        review_prompt = f"""Tu es le contrôleur qualité de TI-LEX CODEX.
+
+Demande utilisateur:
+{request}
+
+Fichier cible:
+{target}
+
+Contenu proposé:
+{content}
+
+Vérifie uniquement les erreurs réelles: syntaxe, API inexistante, imports inventés,
+mauvaise plateforme, commandes impossibles, perte évidente de comportement.
+Réponds uniquement en JSON valide:
+{{"ok": true, "issues": []}}
+ou
+{{"ok": false, "issues": ["erreur 1", "erreur 2"]}}
+"""
+        try:
+            review = self._json(
+                self._ask(
+                    review_prompt,
+                    temperature=0.0,
+                    json_mode=True,
+                    num_predict=500,
+                    read_timeout=90,
+                )
+            )
+        except Exception as exc:
+            self.status(f"⚠ Contrôle Claude indisponible • {exc}")
+            return content
+
+        if bool(review.get("ok")):
+            self.status(f"✅ CLAUDE CONTRÔLE • validé • {target}")
+            return content
+
+        issues = [str(x) for x in review.get("issues", []) if str(x).strip()][:8]
+        if not issues:
+            return content
+
+        repair_prompt = f"""Tu es le réparateur final de TI-LEX CODEX.
+Demande: {request}
+Fichier cible: {target}
+Erreurs détectées: {json.dumps(issues, ensure_ascii=False)}
+
+CONTENU À CORRIGER:
+{content}
+
+Corrige toutes les erreurs signalées sans supprimer les fonctions utiles.
+Retourne uniquement le contenu complet final de {target}, sans explication."""
+        repaired = self._clean_model_output(
+            self._ask(
+                repair_prompt,
+                temperature=0.05,
+                num_predict=2200,
+                read_timeout=150,
+            )
+        )
+        return self._repair_until_valid(target, request, repaired, max_repairs=2)
 
     @staticmethod
     def _json(text: str):
@@ -897,6 +1027,7 @@ CONTRAT OBLIGATOIRE:
             content,
             max_repairs=2,
         )
+        content = self._control_review(target, request, content)
 
         # Protection anti-miniature: une modification ne doit pas écraser un vrai
         # fichier par quelques lignes sans demande explicite.
@@ -973,6 +1104,7 @@ MODE LABORATOIRE TI-LEX:
             self._ask(prompt, num_predict=1800, read_timeout=150),
             max_repairs=2,
         )
+        content = self._control_review(target, request, content)
 
         old_lines = old_content.splitlines()
         new_lines = content.splitlines()
