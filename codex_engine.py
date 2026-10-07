@@ -469,6 +469,107 @@ Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche pa
                 pass
         return backup
 
+    def _project_facts(self) -> dict:
+        """Faits locaux simples pour éviter les commandes et dépendances inventées."""
+        files = self.inventory(max_files=240)
+        file_set = {str(x).replace("\\", "/") for x in files}
+        return {
+            "files": files,
+            "has_package_json": "package.json" in file_set,
+            "has_pyproject": "pyproject.toml" in file_set,
+            "has_requirements": "requirements.txt" in file_set,
+            "has_python": any(Path(x).suffix.lower() == ".py" for x in file_set),
+            "has_powershell": any(Path(x).suffix.lower() == ".ps1" for x in file_set),
+            "has_shell": any(Path(x).suffix.lower() in {".sh", ".bash"} for x in file_set),
+        }
+
+    def _project_generation_rules(self, target: str, request: str) -> str:
+        facts = self._project_facts()
+        lower = str(request or "").lower()
+        platform_hint = "non précisée"
+        if any(x in lower for x in ("powershell", "windows", "wsl")):
+            platform_hint = "Windows/PowerShell"
+        elif any(x in lower for x in ("kali", "linux", "ubuntu", "bash")):
+            platform_hint = "Linux/Kali/Bash"
+        return f"""
+RÈGLES DE FIABILITÉ:
+- Plateforme demandée: {platform_hint}.
+- package.json présent: {facts["has_package_json"]}.
+- requirements.txt présent: {facts["has_requirements"]}.
+- Projet Python présent: {facts["has_python"]}.
+- Ne mélange jamais PowerShell et Bash/Kali dans le même bloc de commandes.
+- Ne propose pas npm install/npm start si package.json est absent, sauf si la demande crée réellement un projet Node.
+- N’invente pas un fichier, une commande, un module Python ou une dépendance.
+- Pour citer un script existant, utilise son vrai nom présent dans le projet.
+- En Python multiplateforme, préfère sys.executable et shutil.which() quand approprié.
+- subprocess.run()/Popen() n’acceptent pas de paramètre use_powershell.
+- Ne fais pas import powershell sauf si ce module est réellement fourni ou déclaré.
+- Fichier cible: {target}.
+"""
+
+    def _dependency_declared(self, name: str) -> bool:
+        needle = str(name or "").lower().replace("_", "-")
+        for rel in ("requirements.txt", "pyproject.toml", "setup.cfg", "setup.py"):
+            try:
+                p = self.root / rel
+                if p.is_file():
+                    data = p.read_text(encoding="utf-8", errors="replace").lower().replace("_", "-")
+                    if needle in data:
+                        return True
+            except OSError:
+                pass
+        return False
+
+    def _validate_python_semantics(self, target: str, content: str) -> tuple[bool, str]:
+        """Détecte quelques erreurs Python valides syntaxiquement mais non exécutables."""
+        try:
+            tree = ast.parse(content, filename=target)
+        except SyntaxError:
+            return True, ""
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                owner = node.func.value
+                if isinstance(owner, ast.Name) and owner.id == "subprocess":
+                    if node.func.attr in {"run", "Popen", "call", "check_call", "check_output"}:
+                        for kw in node.keywords:
+                            if kw.arg in {"use_powershell", "powershell"}:
+                                return False, f"Paramètre subprocess non supporté: {kw.arg!r}."
+
+            if isinstance(node, ast.Import):
+                names = [alias.name.split(".", 1)[0] for alias in node.names]
+                if "powershell" in names:
+                    if not (self.root / "powershell.py").is_file() and not self._dependency_declared("powershell"):
+                        return False, "Import powershell non déclaré dans le projet."
+
+            if isinstance(node, ast.ImportFrom):
+                module = (node.module or "").split(".", 1)[0]
+                if module == "powershell":
+                    if not (self.root / "powershell.py").is_file() and not self._dependency_declared("powershell"):
+                        return False, "Import depuis powershell non déclaré dans le projet."
+
+        return True, ""
+
+    @staticmethod
+    def _validate_script_language(target: str, content: str) -> tuple[bool, str]:
+        suffix = Path(target).suffix.lower()
+        text = content or ""
+        if suffix in {".sh", ".bash", ".zsh"}:
+            if "```" in text:
+                return False, "Script shell invalide: balises Markdown détectées."
+            if re.search(r"(?mi)^\s*(Get-ChildItem|Copy-Item|Set-Location|Write-Host|New-Item)\b", text):
+                return False, "Script Linux mélangé avec des commandes PowerShell."
+        if suffix == ".ps1":
+            if "```" in text:
+                return False, "Script PowerShell invalide: balises Markdown détectées."
+            if re.search(r"(?mi)^\s*(?:sudo\s+)?apt(?:-get)?\s+", text):
+                return False, "Script PowerShell mélangé avec des commandes apt Linux/Kali."
+            if re.search(r"(?mi)^\s*#!/bin/(?:ba)?sh", text):
+                return False, "Script PowerShell contient un shebang Bash."
+        if suffix in {".bat", ".cmd"} and "```" in text:
+            return False, "Script batch invalide: balises Markdown détectées."
+        return True, ""
+
     @staticmethod
     def _readme_generation_rules(target: str) -> str:
         """Règles supplémentaires quand le fichier cible est un README."""
@@ -514,6 +615,9 @@ RÈGLES README OBLIGATOIRES:
                 ast.parse(content, filename=target)
             except SyntaxError as exc:
                 return False, f"Python invalide: ligne {exc.lineno}: {exc.msg}"
+            valid, error = self._validate_python_semantics(target, content)
+            if not valid:
+                return False, error
             return True, ""
 
         if suffix == ".json":
@@ -540,6 +644,14 @@ RÈGLES README OBLIGATOIRES:
                 valid, error = self._validate_readme_command_blocks(content)
                 if not valid:
                     return False, error
+            return True, ""
+
+        if suffix in {".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd"}:
+            valid, error = self._validate_script_language(target, content)
+            if not valid:
+                return False, error
+            if not stripped:
+                return False, "Le script généré est vide."
             return True, ""
 
         if not stripped:
