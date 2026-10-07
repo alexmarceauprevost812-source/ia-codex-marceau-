@@ -494,6 +494,9 @@ class TiLexCodexWindow(QMainWindow):
             ("CLAUDE + CONTRÔLE", "CLAUDE_CONTROL"),
             ("CHATGPT", "OPENAI"),
             ("CHATGPT + INTERNET", "OPENAI_WEB"),
+            ("PERPLEXITY", "PERPLEXITY"),
+            ("DEEPSEEK", "DEEPSEEK"),
+            ("GEMINI", "GEMINI"),
         ):
             action = QAction(label, self)
             action.triggered.connect(
@@ -520,6 +523,18 @@ class TiLexCodexWindow(QMainWindow):
         add_openai.triggered.connect(lambda: self._save_api_key("openai", "OpenAI"))
         api_menu.addAction(add_openai)
 
+        add_perplexity = QAction("Enregistrer clé Perplexity", self)
+        add_perplexity.triggered.connect(lambda: self._save_api_key("perplexity", "Perplexity"))
+        api_menu.addAction(add_perplexity)
+
+        add_deepseek = QAction("Enregistrer clé DeepSeek", self)
+        add_deepseek.triggered.connect(lambda: self._save_api_key("deepseek", "DeepSeek"))
+        api_menu.addAction(add_deepseek)
+
+        add_gemini = QAction("Enregistrer clé Gemini", self)
+        add_gemini.triggered.connect(lambda: self._save_api_key("gemini", "Gemini"))
+        api_menu.addAction(add_gemini)
+
         api_menu.addSeparator()
 
         status_keys = QAction("Voir le statut des clés", self)
@@ -533,6 +548,18 @@ class TiLexCodexWindow(QMainWindow):
         delete_openai = QAction("Supprimer clé OpenAI", self)
         delete_openai.triggered.connect(lambda: self._delete_api_key("openai", "OpenAI"))
         api_menu.addAction(delete_openai)
+
+        delete_perplexity = QAction("Supprimer clé Perplexity", self)
+        delete_perplexity.triggered.connect(lambda: self._delete_api_key("perplexity", "Perplexity"))
+        api_menu.addAction(delete_perplexity)
+
+        delete_deepseek = QAction("Supprimer clé DeepSeek", self)
+        delete_deepseek.triggered.connect(lambda: self._delete_api_key("deepseek", "DeepSeek"))
+        api_menu.addAction(delete_deepseek)
+
+        delete_gemini = QAction("Supprimer clé Gemini", self)
+        delete_gemini.triggered.connect(lambda: self._delete_api_key("gemini", "Gemini"))
+        api_menu.addAction(delete_gemini)
 
         self.api_key_button.setMenu(api_menu)
         header_layout.addWidget(self.api_key_button)
@@ -2304,9 +2331,15 @@ class TiLexCodexWindow(QMainWindow):
         try:
             anthropic = self.secret_store.status("anthropic")
             openai = self.secret_store.status("openai")
+            perplexity = self.secret_store.status("perplexity")
+            deepseek = self.secret_store.status("deepseek")
+            gemini = self.secret_store.status("gemini")
             text = (
                 f"Anthropic : {'CONFIGURÉE' if anthropic.configured else 'ABSENTE'}\n"
-                f"OpenAI : {'CONFIGURÉE' if openai.configured else 'ABSENTE'}\n\n"
+                f"OpenAI : {'CONFIGURÉE' if openai.configured else 'ABSENTE'}\n"
+                f"Perplexity : {'CONFIGURÉE' if perplexity.configured else 'ABSENTE'}\n"
+                f"DeepSeek : {'CONFIGURÉE' if deepseek.configured else 'ABSENTE'}\n"
+                f"Gemini : {'CONFIGURÉE' if gemini.configured else 'ABSENTE'}\n\n"
                 f"Coffre : {openai.backend}"
             )
             QMessageBox.information(self, "Statut des clés API", text)
