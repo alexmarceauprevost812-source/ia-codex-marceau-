@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 from codex_engine import CodexEngine
 from config import load_config
+from secret_store import SecretStore
 
 
 IGNORE_DIRS = {".git", ".venv", "venv", "__pycache__", ".tilex", "node_modules"}
@@ -296,11 +297,12 @@ class CodexWorker(QObject):
     finished = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, root: Path, request: str, model: str):
+    def __init__(self, root: Path, request: str, model: str, provider: str = "OLLAMA"):
         super().__init__()
         self.root = root
         self.request = request
         self.model = model
+        self.provider = str(provider or "OLLAMA").upper()
 
     def run(self):
         try:
@@ -308,6 +310,7 @@ class CodexWorker(QObject):
                 self.root,
                 model=self.model,
                 status=lambda msg: self.status.emit(str(msg)),
+                provider=self.provider,
             )
             if self.request.strip().lower().startswith("/chat"):
                 result = engine.chat(self.request)
@@ -352,6 +355,8 @@ class TiLexCodexWindow(QMainWindow):
         self.display_theme = "NOIR"
         self.neon_accent = "#39ff14"
         self.display_font = "Ink Free"
+        self.agent_provider = "OLLAMA"
+        self.secret_store = SecretStore()
         self.typewriter_timer = QTimer(self)
         self.typewriter_timer.setInterval(12)
         self.typewriter_timer.timeout.connect(self._typewriter_step)
@@ -474,6 +479,63 @@ class TiLexCodexWindow(QMainWindow):
         header_layout.addWidget(header_nav, 2)
 
         header_layout.addStretch(1)
+
+        # ===== AGENT SELECTOR =====
+        self.agent_button = QToolButton()
+        self.agent_button.setObjectName("agentMenuButton")
+        self.agent_button.setText("🤖  AGENT : OLLAMA")
+        self.agent_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
+        agent_menu = QMenu(self.agent_button)
+        agent_menu.setObjectName("agentMenu")
+        for label, provider in (
+            ("OLLAMA LOCAL", "OLLAMA"),
+            ("CLAUDE", "CLAUDE"),
+            ("CLAUDE + CONTRÔLE", "CLAUDE_CONTROL"),
+            ("CHATGPT", "OPENAI"),
+            ("CHATGPT + INTERNET", "OPENAI_WEB"),
+        ):
+            action = QAction(label, self)
+            action.triggered.connect(
+                lambda checked=False, p=provider, name=label: self._set_agent_provider(p, name)
+            )
+            agent_menu.addAction(action)
+        self.agent_button.setMenu(agent_menu)
+        header_layout.addWidget(self.agent_button)
+
+        # ===== LOCAL API KEY VAULT =====
+        self.api_key_button = QToolButton()
+        self.api_key_button.setObjectName("apiKeyMenuButton")
+        self.api_key_button.setText("🔑  CLÉS API")
+        self.api_key_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
+        api_menu = QMenu(self.api_key_button)
+        api_menu.setObjectName("apiKeyMenu")
+
+        add_anthropic = QAction("Enregistrer clé Anthropic", self)
+        add_anthropic.triggered.connect(lambda: self._save_api_key("anthropic", "Anthropic"))
+        api_menu.addAction(add_anthropic)
+
+        add_openai = QAction("Enregistrer clé OpenAI", self)
+        add_openai.triggered.connect(lambda: self._save_api_key("openai", "OpenAI"))
+        api_menu.addAction(add_openai)
+
+        api_menu.addSeparator()
+
+        status_keys = QAction("Voir le statut des clés", self)
+        status_keys.triggered.connect(self._show_api_key_status)
+        api_menu.addAction(status_keys)
+
+        delete_anthropic = QAction("Supprimer clé Anthropic", self)
+        delete_anthropic.triggered.connect(lambda: self._delete_api_key("anthropic", "Anthropic"))
+        api_menu.addAction(delete_anthropic)
+
+        delete_openai = QAction("Supprimer clé OpenAI", self)
+        delete_openai.triggered.connect(lambda: self._delete_api_key("openai", "OpenAI"))
+        api_menu.addAction(delete_openai)
+
+        self.api_key_button.setMenu(api_menu)
+        header_layout.addWidget(self.api_key_button)
 
         self.ollama_label = QLabel("● Ollama : vérification…")
         self.ollama_label.setObjectName("ollama")
@@ -1019,7 +1081,9 @@ class TiLexCodexWindow(QMainWindow):
                 border: none;
             }}
 
-            #displayMenuButton {{
+            #displayMenuButton,
+            #agentMenuButton,
+            #apiKeyMenuButton {{
                 background: transparent;
                 color: {accent};
                 border: none;
@@ -1028,7 +1092,9 @@ class TiLexCodexWindow(QMainWindow):
                 font-size: 13px;
             }}
 
-            #displayMenuButton:hover {{
+            #displayMenuButton:hover,
+            #agentMenuButton:hover,
+            #apiKeyMenuButton:hover {{
                 background: {panel};
                 color: {accent};
             }}
@@ -2204,6 +2270,68 @@ class TiLexCodexWindow(QMainWindow):
         except OSError as exc:
             QMessageBox.critical(self, "Erreur ZIP", str(exc))
 
+    def _set_agent_provider(self, provider: str, label: str):
+        self.agent_provider = str(provider or "OLLAMA").upper()
+        self.agent_button.setText(f"🤖  AGENT : {label}")
+        self._log(f"Agent sélectionné : {label}", "INFO")
+
+    def _save_api_key(self, provider: str, label: str):
+        try:
+            value, ok = QInputDialog.getText(
+                self,
+                f"Clé API {label}",
+                f"Entre ta clé API {label}. Elle sera enregistrée seulement dans le coffre sécurisé de cet appareil.",
+                QLineEdit.EchoMode.Password,
+            )
+            if not ok:
+                return
+            value = str(value or "").strip()
+            if not value:
+                QMessageBox.warning(self, "Clé API", "Aucune clé entrée.")
+                return
+            self.secret_store.set_api_key(provider, value)
+            self._log(f"Clé {label} enregistrée dans le coffre local.", "SUCCESS")
+            QMessageBox.information(
+                self,
+                "Clé API",
+                f"Clé {label} enregistrée localement dans le coffre sécurisé du système.",
+            )
+        except Exception as exc:
+            self._log(f"Coffre API : {exc}", "ERROR")
+            QMessageBox.critical(self, "Erreur coffre API", str(exc))
+
+    def _show_api_key_status(self):
+        try:
+            anthropic = self.secret_store.status("anthropic")
+            openai = self.secret_store.status("openai")
+            text = (
+                f"Anthropic : {'CONFIGURÉE' if anthropic.configured else 'ABSENTE'}\n"
+                f"OpenAI : {'CONFIGURÉE' if openai.configured else 'ABSENTE'}\n\n"
+                f"Coffre : {openai.backend}"
+            )
+            QMessageBox.information(self, "Statut des clés API", text)
+        except Exception as exc:
+            QMessageBox.critical(self, "Erreur coffre API", str(exc))
+
+    def _delete_api_key(self, provider: str, label: str):
+        answer = QMessageBox.question(
+            self,
+            "Supprimer la clé",
+            f"Supprimer la clé API {label} de cet appareil ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            deleted = self.secret_store.delete_api_key(provider)
+            if deleted:
+                self._log(f"Clé {label} supprimée du coffre local.", "INFO")
+                QMessageBox.information(self, "Clé API", f"Clé {label} supprimée.")
+            else:
+                QMessageBox.information(self, "Clé API", f"Aucune clé {label} enregistrée.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Erreur coffre API", str(exc))
+
     def _refresh_ollama_status(self):
         try:
             response = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
@@ -2256,6 +2384,7 @@ class TiLexCodexWindow(QMainWindow):
                 self.project_root,
                 request,
                 self.config.get("model", "qwen2.5:7b"),
+                self.agent_provider,
             )
             worker.moveToThread(thread)
 
