@@ -45,6 +45,9 @@ class CodexEngine:
         self.secret_store = SecretStore()
         self.anthropic_model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         self.openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.5")
+        self.perplexity_model = os.environ.get("PERPLEXITY_MODEL", "sonar-pro")
+        self.deepseek_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
+        self.gemini_model = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
         self.last_file = None
         self.last_content = ""
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
@@ -121,6 +124,35 @@ class CodexEngine:
                 num_predict=num_predict,
                 read_timeout=read_timeout,
                 web_search=self.provider == "OPENAI_WEB",
+            )
+        if self.provider == "PERPLEXITY":
+            return self._ask_openai_compatible(
+                provider="perplexity",
+                label="PERPLEXITY",
+                endpoint="https://api.perplexity.ai/chat/completions",
+                model=self.perplexity_model,
+                prompt=prompt,
+                temperature=temperature,
+                num_predict=num_predict,
+                read_timeout=read_timeout,
+            )
+        if self.provider == "DEEPSEEK":
+            return self._ask_openai_compatible(
+                provider="deepseek",
+                label="DEEPSEEK",
+                endpoint="https://api.deepseek.com/chat/completions",
+                model=self.deepseek_model,
+                prompt=prompt,
+                temperature=temperature,
+                num_predict=num_predict,
+                read_timeout=read_timeout,
+            )
+        if self.provider == "GEMINI":
+            return self._ask_gemini(
+                prompt,
+                temperature=temperature,
+                num_predict=num_predict,
+                read_timeout=read_timeout,
             )
 
         active_model = self._resolve_model()
@@ -268,6 +300,115 @@ class CodexEngine:
 
         if not answer:
             raise RuntimeError("ChatGPT a retourné une réponse vide.")
+        return answer
+
+    def _ask_openai_compatible(
+        self,
+        provider: str,
+        label: str,
+        endpoint: str,
+        model: str,
+        prompt: str,
+        temperature: float = 0.15,
+        num_predict: int = 1800,
+        read_timeout: int = 150,
+    ) -> str:
+        api_key = self.secret_store.get_api_key(provider)
+        if not api_key:
+            raise RuntimeError(
+                f"Clé {label} absente. Utilise le menu CLÉS API en haut à droite."
+            )
+
+        self.status(f"☁ {label} • {model}")
+        response = requests.post(
+            endpoint,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": float(temperature),
+                "max_tokens": int(max(64, num_predict)),
+                "stream": False,
+            },
+            timeout=(10, read_timeout),
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = response.text.strip()
+            raise RuntimeError(
+                f"{label} HTTP {response.status_code}: {body or exc}"
+            ) from exc
+
+        data = response.json()
+        try:
+            answer = str(data["choices"][0]["message"]["content"] or "").strip()
+        except (KeyError, IndexError, TypeError):
+            answer = ""
+        if not answer:
+            raise RuntimeError(f"{label} a retourné une réponse vide.")
+        return answer
+
+    def _ask_gemini(
+        self,
+        prompt: str,
+        temperature: float = 0.15,
+        num_predict: int = 1800,
+        read_timeout: int = 150,
+    ) -> str:
+        api_key = self.secret_store.get_api_key("gemini")
+        if not api_key:
+            raise RuntimeError(
+                "Clé Gemini absente. Utilise le menu CLÉS API en haut à droite."
+            )
+
+        self.status(f"✨ GEMINI • {self.gemini_model}")
+        endpoint = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.gemini_model}:generateContent"
+        )
+        response = requests.post(
+            endpoint,
+            headers={
+                "x-goog-api-key": api_key,
+                "Content-Type": "application/json",
+            },
+            json={
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": prompt}],
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": float(temperature),
+                    "maxOutputTokens": int(max(64, num_predict)),
+                },
+            },
+            timeout=(10, read_timeout),
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = response.text.strip()
+            raise RuntimeError(
+                f"Gemini HTTP {response.status_code}: {body or exc}"
+            ) from exc
+
+        data = response.json()
+        parts = []
+        try:
+            for part in data["candidates"][0]["content"]["parts"]:
+                if isinstance(part, dict) and part.get("text"):
+                    parts.append(str(part["text"]))
+        except (KeyError, IndexError, TypeError):
+            pass
+        answer = "\n".join(parts).strip()
+        if not answer:
+            raise RuntimeError("Gemini a retourné une réponse vide.")
         return answer
 
     def _control_review(self, target: str, request: str, content: str) -> str:
