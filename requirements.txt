@@ -4,3 +4,4 @@ requests>=2.31.0
 prompt_toolkit>=3.0.43
 textual[syntax]>=0.89.0
 PySide6>=6.7.0
+keyring>=25.0.0
