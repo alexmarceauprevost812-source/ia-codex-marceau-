@@ -76,6 +76,25 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 TI-LEX CODEX utilise Ollama localement sur `127.0.0.1:11434`. Aucune clé API payante n'est nécessaire pour le modèle local.
 
+## Agent DeepSeek
+
+L'interface graphique peut utiliser DeepSeek comme agent distant.
+
+1. Ouvre **CLÉS API** puis **Enregistrer clé DeepSeek**.
+2. Ouvre **AGENT** puis sélectionne **DEEPSEEK**.
+3. Le moteur utilise par défaut `deepseek-flash` avec le mode de réflexion activé en effort `high`.
+4. La clé reste dans le coffre de secrets du système via `keyring`; elle n'est pas écrite dans le dépôt.
+
+Variables optionnelles :
+
+```text
+DEEPSEEK_MODEL=deepseek-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_REASONING_EFFORT=high
+```
+
+Valeurs acceptées pour `DEEPSEEK_REASONING_EFFORT` : `none`, `low`, `high`, `max`.
+
 ## IA locale gratuite
 
 Installe Ollama depuis sa documentation officielle, puis :
