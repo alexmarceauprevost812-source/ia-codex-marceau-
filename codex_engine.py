@@ -424,6 +424,8 @@ Fichiers existants: {json.dumps(files, ensure_ascii=False)}
 Fichiers probablement pertinents: {json.dumps(relevant, ensure_ascii=False)}
 Mémoire récente du projet: {json.dumps(memory[-8:], ensure_ascii=False)}
 
+{self._project_generation_rules("(plan)", request)}
+
 Utilise la mémoire uniquement pour comprendre la continuité du projet. La demande actuelle reste prioritaire.
 
 Conçois un plan professionnel en utilisant LE MINIMUM DE FICHIERS NÉCESSAIRE.
@@ -721,6 +723,7 @@ CONTENU INVALIDE:
 {content}
 
 Corrige uniquement ce qui est nécessaire pour produire le contenu COMPLET et valide de {target}.
+{self._project_generation_rules(target, request)}
 {self._readme_generation_rules(target)}
 Respecte strictement le langage correspondant à l'extension.
 Conserve les fonctions, classes, imports et comportements utiles déjà présents.
@@ -753,6 +756,7 @@ Demande: {request}
 CONTENU ACTUEL:
 {old_content}
 
+{self._project_generation_rules(target, request)}
 {self._readme_generation_rules(target)}
 
 Réponds UNIQUEMENT en JSON valide avec cette structure:
@@ -863,6 +867,7 @@ COMMANDE: {request}
 FICHIER ACTUEL:
 {old_content if old_content else "(nouveau fichier)"}
 
+{self._project_generation_rules(target, request)}
 {self._readme_generation_rules(target)}
 
 CONTRAT OBLIGATOIRE:
@@ -942,6 +947,7 @@ Objectif: {task.get("goal", "implémenter la demande")}
 Contexte utile:
 {context or "(aucun fichier source nécessaire)"}
 
+{self._project_generation_rules(target, request)}
 {self._readme_generation_rules(target)}
 
 Écris le contenu COMPLET, exécutable et professionnel du fichier cible uniquement.
@@ -986,6 +992,7 @@ Fichier cible: {target}
 CONTENU ACTUEL COMPLET:
 {old_content}
 
+{self._project_generation_rules(target, request)}
 {self._readme_generation_rules(target)}
 
 Refais la modification en conservant TOUT ce qui n'est pas directement concerné par la demande.
