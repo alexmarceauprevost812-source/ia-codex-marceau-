@@ -292,6 +292,73 @@ class DiffHighlighter(QSyntaxHighlighter):
             self.setFormat(0, len(text), self.file)
 
 
+
+class MarceauBackground(QWidget):
+    """Fond TI-LEX MARCEAU avec image à 40 % et fallback graphique."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.background_pixmap = QPixmap()
+        self.background_opacity = 0.40
+        self.background_path: Path | None = None
+        self.setObjectName("marceauRoot")
+        self.setAutoFillBackground(False)
+
+    def set_background_image(self, path: Path | str | None):
+        self.background_path = Path(path).expanduser().resolve() if path else None
+        self.background_pixmap = QPixmap()
+        if self.background_path and self.background_path.is_file():
+            self.background_pixmap.load(str(self.background_path))
+        self.update()
+
+    def set_background_opacity(self, opacity: float):
+        self.background_opacity = max(0.0, min(1.0, float(opacity)))
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.fillRect(self.rect(), QColor("#030303"))
+
+        if not self.background_pixmap.isNull():
+            scaled = self.background_pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = (scaled.width() - self.width()) // 2
+            y = (scaled.height() - self.height()) // 2
+            source = QRect(x, y, self.width(), self.height())
+            painter.setOpacity(self.background_opacity)
+            painter.drawPixmap(self.rect(), scaled, source)
+            painter.setOpacity(1.0)
+        else:
+            # Fallback intégré si l'image originale n'est pas encore sur la machine.
+            painter.setOpacity(0.40)
+            orange = QColor("#ff7a00")
+            orange.setAlpha(210)
+            painter.setPen(QPen(orange, 4))
+            big = QFont("Arial Black", max(64, min(self.width(), self.height()) // 5))
+            big.setBold(True)
+            painter.setFont(big)
+            painter.drawText(
+                self.rect().adjusted(20, -20, -20, 20),
+                Qt.AlignmentFlag.AlignCenter,
+                "M",
+            )
+            logo = QFont("Arial Black", max(30, min(self.width(), self.height()) // 14))
+            logo.setBold(True)
+            painter.setFont(logo)
+            painter.drawText(
+                self.rect().adjusted(20, 150, -20, -20),
+                Qt.AlignmentFlag.AlignCenter,
+                "MARCEAU",
+            )
+            painter.setOpacity(1.0)
+
+        painter.end()
+
+
 class CodexWorker(QObject):
     status = Signal(str)
     finished = Signal(object)
@@ -356,11 +423,12 @@ class TiLexCodexWindow(QMainWindow):
         self.last_codex_request = ""
         self.last_right_panel_index = 0
         self.display_theme = "NOIR"
-        self.neon_accent = "#39ff14"
+        self.neon_accent = "#ff7a00"
         self.display_font = "Ink Free"
         self.agent_provider = "OLLAMA"
         self.anthropic_model = "claude-sonnet-5-5"
         self.secret_store = SecretStore()
+        self.marceau_background_path: Path | None = None
         self.typewriter_timer = QTimer(self)
         self.typewriter_timer.setInterval(12)
         self.typewriter_timer.timeout.connect(self._typewriter_step)
@@ -392,6 +460,7 @@ class TiLexCodexWindow(QMainWindow):
         self.setMinimumSize(1180, 720)
 
         self._build_ui()
+        self._reload_marceau_background()
         if hasattr(self, "brand"):
             self.brand.set_font_family(self.display_font)
             self.brand.set_accent_color(self.neon_accent)
@@ -405,7 +474,12 @@ class TiLexCodexWindow(QMainWindow):
         self._refresh_ollama_status()
 
     def _build_ui(self):
-        root = QWidget()
+        root = MarceauBackground()
+        self.marceau_background = root
+        self.marceau_background_path = self._find_marceau_background()
+        root.set_background_opacity(0.40)
+        if self.marceau_background_path:
+            root.set_background_image(self.marceau_background_path)
         root_layout = QVBoxLayout(root)
         root_layout.setContentsMargins(8, 8, 8, 8)
         root_layout.setSpacing(7)
@@ -434,6 +508,15 @@ class TiLexCodexWindow(QMainWindow):
             action = QAction(label, self)
             action.triggered.connect(lambda checked=False, value=key: self._set_display_theme(value))
             theme_menu.addAction(action)
+
+        background_menu = display_menu.addMenu("Fond MARCEAU (40 %)")
+        choose_background = QAction("Choisir l’image MARCEAU…", self)
+        choose_background.triggered.connect(self._choose_marceau_background)
+        background_menu.addAction(choose_background)
+
+        reload_background = QAction("Recharger le fond", self)
+        reload_background.triggered.connect(self._reload_marceau_background)
+        background_menu.addAction(reload_background)
 
         neon_menu = display_menu.addMenu("Couleur néon")
         for label, value in (
@@ -919,6 +1002,83 @@ class TiLexCodexWindow(QMainWindow):
         self.btn_build.setShortcut(QKeySequence("Ctrl+B"))
         self.btn_open.setShortcut(QKeySequence("Ctrl+O"))
 
+    def _find_marceau_background(self) -> Path | None:
+        """Trouve automatiquement l'image MARCEAU dans le projet ou les dossiers Windows usuels."""
+        preferred_names = (
+            "marceau_background.png",
+            "marceau_background.jpg",
+            "marceau.png",
+            "MARCEAU.png",
+            "Image Codex 22 sept. 2026, 11_15_11.png",
+        )
+        roots = (
+            Path(__file__).resolve().parent / "assets",
+            Path(__file__).resolve().parent,
+            Path.home() / "Downloads",
+            Path.home() / "Desktop",
+            Path.home() / "Pictures",
+        )
+
+        for root in roots:
+            for name in preferred_names:
+                candidate = root / name
+                if candidate.is_file():
+                    return candidate
+
+        for root in roots[2:]:
+            if not root.is_dir():
+                continue
+            for pattern in ("*marceau*.png", "*marceau*.jpg", "*codex*.png", "*codex*.jpg"):
+                try:
+                    for candidate in sorted(root.glob(pattern)):
+                        if candidate.is_file():
+                            return candidate
+                except OSError:
+                    continue
+        return None
+
+    def _choose_marceau_background(self):
+        start_dir = str(Path.home() / "Pictures")
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choisir le fond MARCEAU",
+            start_dir,
+            "Images (*.png *.jpg *.jpeg *.webp)",
+        )
+        if not filename:
+            return
+        path = Path(filename).resolve()
+        self.marceau_background_path = path
+        self.marceau_background.set_background_image(path)
+        self.marceau_background.set_background_opacity(0.40)
+        try:
+            state_dir = self.project_root / ".tilex"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "background_path.txt").write_text(str(path), encoding="utf-8")
+        except OSError:
+            pass
+        self._log(f"Fond MARCEAU chargé à 40 % : {path.name}", "SUCCESS")
+
+    def _reload_marceau_background(self):
+        saved = self.project_root / ".tilex" / "background_path.txt"
+        path = None
+        try:
+            if saved.is_file():
+                candidate = Path(saved.read_text(encoding="utf-8").strip()).expanduser()
+                if candidate.is_file():
+                    path = candidate
+        except OSError:
+            path = None
+
+        path = path or self._find_marceau_background()
+        self.marceau_background_path = path
+        self.marceau_background.set_background_image(path)
+        self.marceau_background.set_background_opacity(0.40)
+        if path:
+            self._log(f"Fond MARCEAU rechargé : {path.name}", "SUCCESS")
+        else:
+            self._log("Image MARCEAU introuvable : fallback graphique activé.", "WARN")
+
     def _show_right_panel(self, index: int):
         self.last_right_panel_index = index
         self.right_stack.setCurrentIndex(index)
@@ -1077,24 +1237,38 @@ class TiLexCodexWindow(QMainWindow):
             muted = "#b0b0b0"
             editor_bg = "#202020"
         else:
-            bg = "#000000"
-            panel = "#000000"
+            bg = "#030303"
+            panel = "rgba(4, 4, 4, 205)"
             text = "#f4f4f4"
-            muted = "#aaaaaa"
-            editor_bg = "#000000"
+            muted = "#c2c2c2"
+            editor_bg = "rgba(0, 0, 0, 165)"
 
         overrides = f"""
-            QMainWindow, QWidget {{
+            QMainWindow {{
                 background: {bg};
+                color: {text};
+            }}
+
+            QWidget {{
+                background: transparent;
                 color: {text};
                 font-family: "{font}";
             }}
 
+            QWidget#marceauRoot {{
+                background: transparent;
+            }}
+
             #header, #enginePanel, #panel, #commandBar,
-            #projectTree, #editor, #output, #diffView,
-            #tabTitle, #langBadge, #topStatus, #ollama,
             #infoCard {{
                 background: {panel};
+                border: 1px solid {accent};
+                border-radius: 10px;
+            }}
+
+            #projectTree, #editor, #output, #diffView,
+            #tabTitle, #langBadge, #topStatus, #ollama {{
+                background: {editor_bg};
             }}
 
             #reflexionAvatarFrame {{
@@ -1111,6 +1285,8 @@ class TiLexCodexWindow(QMainWindow):
             #editor, #output, #diffView, #projectTree {{
                 background: {editor_bg};
                 color: {text};
+                border: 1px solid {accent};
+                border-radius: 8px;
                 font-family: "{font}";
             }}
 
