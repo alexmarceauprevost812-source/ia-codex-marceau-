@@ -15,6 +15,7 @@ from typing import Callable
 import requests
 
 from secret_store import SecretStore
+from project_pipeline import commit_project_files, fingerprint
 
 IGNORE_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".tilex"}
 TEXT_EXTENSIONS = {
@@ -66,6 +67,9 @@ class CodexEngine:
             if preferred_target else None
         )
         self.active_request = ""
+        self.task_limit = 2
+        self.expected_hashes: dict[str, str | None] = {}
+        self.generated_context: dict[str, str] = {}
         self.last_file = None
         self.last_content = ""
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
@@ -794,11 +798,27 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
             return "PRO", raw[5:].strip()
         if lower == "/pro":
             return "PRO", ""
+        if lower.startswith("/project "):
+            return "PROJECT", raw[9:].strip()
+        if lower == "/project":
+            return "PROJECT", ""
+        if lower.startswith("/projet "):
+            return "PROJECT", raw[8:].strip()
+        if lower == "/projet":
+            return "PROJECT", ""
 
         file_pattern = r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|pyw|js|jsx|mjs|cjs|ts|tsx|html?|css|scss|json|md|txt|toml|ya?ml|sql|sh|bash|zsh|ps1|bat|cmd|c|h|cpp|hpp|cc|java|go|rs|php|rb|lua|xml|ini|cfg|env))"
         explicit = list(dict.fromkeys(re.findall(file_pattern, raw)))
         if len(explicit) >= 2:
             return "PRO", raw
+
+        project_words = (
+            "système d'exploitation", "systeme d'exploitation", "distribution linux",
+            "image iso", "iso bootable", "lexos complet", "projet de grande taille",
+            "application complète avec plusieurs modules",
+        )
+        if any(word in lower for word in project_words):
+            return "PROJECT", raw
 
         complex_words = (
             "architecture", "architecte", "refactor", "refactorise", "refactoriser",
@@ -893,7 +913,7 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
         explicit_files = self._explicit_file_refs(request)
         preferred = self._safe_preferred_target(request)
 
-        for index, task in enumerate(raw_tasks[:2], 1):
+        for index, task in enumerate(raw_tasks[:self.task_limit], 1):
             if not isinstance(task, dict):
                 continue
             files = [str(x).strip().replace("\\", "/") for x in task.get("files", []) if str(x).strip()]
@@ -904,7 +924,12 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
 
             # Si l'utilisateur n'a nommé aucun fichier et ne crée rien de nouveau,
             # le fichier ouvert dans l'éditeur gagne sur le choix approximatif de l'IA.
-            if preferred and not explicit_files and not self._requests_new_file(request):
+            if (
+                self.task_limit <= 2
+                and preferred
+                and not explicit_files
+                and not self._requests_new_file(request)
+            ):
                 rel = preferred
 
             explicit = any(
@@ -943,6 +968,19 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
         return plan
 
     def make_plan(self, request: str) -> dict:
+        if self.task_limit > 2:
+            task_rules = (
+                f"MODE PROJET : planifie jusqu'à {self.task_limit} tâches, "
+                "une tâche par fichier. Pour un grand projet, crée des modules distincts, "
+                "fichiers de configuration, documentation uniquement si demandée, "
+                "et tests adaptés. Ne génère pas un OS complet en une seule passe : "
+                "fais une étape de construction cohérente et testable."
+            )
+        else:
+            task_rules = (
+                "MODE PRO : utilise 1 fichier par défaut et 2 fichiers seulement "
+                "si la séparation est indispensable."
+            )
         files = self.inventory()
         relevant = self.relevant_files(request, max_files=12)
         memory = self._load_project_memory()
@@ -959,7 +997,8 @@ Mémoire récente du projet: {json.dumps(memory[-8:], ensure_ascii=False)}
 Utilise la mémoire uniquement pour comprendre la continuité du projet. La demande actuelle reste prioritaire.
 
 Conçois un plan professionnel en utilisant LE MINIMUM DE FICHIERS NÉCESSAIRE.
-Règle principale: utilise 1 seul fichier par défaut. Crée un nouveau fichier si c'est réellement le bon endroit pour le code demandé. Utilise 2 fichiers MAXIMUM seulement si la séparation est techniquement nécessaire ou explicitement demandée par l'utilisateur. N'éparpille jamais une petite modification dans plusieurs fichiers. Si tout peut être proprement fait dans 1 fichier, fais-le dans 1 seul fichier.
+{task_rules}
+Crée un nouveau fichier uniquement quand c'est le bon endroit pour le code demandé. Si un fichier existant convient et que la demande est une modification, modifie-le au lieu de créer un doublon.
 Choisis de vrais noms de fichiers avec une extension adaptée au langage. Respecte un fichier explicitement nommé par l'utilisateur. Si aucun autre fichier n'est explicitement nommé et qu'un fichier actuellement ouvert est indiqué, modifie ce fichier en priorité. N'écris jamais dans .tilex, backups, backup, sauvegardes ou autres dossiers de sauvegarde sauf demande explicite. N’utilise jamais README.md comme remplacement d’un fichier de code sauf si la demande parle explicitement du README.
 TI-LEX est un CODEX DE LABORATOIRE: quand la demande concerne un test, conçois du code réellement exécutable dans un labo local autorisé, avec des données fictives ou des cibles locales comme 127.0.0.1. Favorise les tests unitaires, intégration, diagnostics, mocks, serveurs locaux et simulations défensives. Ne planifie pas de vol d'identifiants, malware, persistance, contournement de sécurité, destruction ou attaque contre des systèmes tiers.
 Réponds UNIQUEMENT en JSON valide, sans markdown:
@@ -975,8 +1014,13 @@ Réponds UNIQUEMENT en JSON valide, sans markdown:
     }}
   ]
 }}
-Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; 1 tâche par défaut, 2 tâches uniquement si indispensable; chaque tâche cible EXACTEMENT 1 fichier. Ne crée jamais 3 fichiers pour une seule commande. Donne toujours un vrai nom de fichier avec extension. Si un fichier existant convient, modifie-le plutôt que de créer inutilement un doublon. Si aucun fichier existant ne convient, crée un nouveau fichier au nom clair. Ne génère jamais un résumé à la place du code. N’utilise README.md que si l’utilisateur le demande explicitement."""
-        plan = self._json(self._ask(prompt, json_mode=True, num_predict=600, read_timeout=60))
+Règles: chemins relatifs seulement; pas de .git/.venv/node_modules; au plus {self.task_limit} tâches; chaque tâche cible EXACTEMENT 1 fichier. Donne toujours un vrai nom de fichier avec extension. Si un fichier existant convient, modifie-le plutôt que de créer inutilement un doublon. Si aucun fichier existant ne convient, crée un nouveau fichier au nom clair. Ne génère jamais un résumé à la place du code. N’utilise README.md que si l’utilisateur le demande explicitement."""
+        plan = self._json(self._ask(
+            prompt,
+            json_mode=True,
+            num_predict=1500 if self.task_limit > 2 else 600,
+            read_timeout=120 if self.task_limit > 2 else 60,
+        ))
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
             raise ValueError("Plan IA invalide")
         plan = self._normalize_plan(plan, request)
@@ -1417,7 +1461,7 @@ CONTRAT OBLIGATOIRE:
 - Ne remplace jamais une vraie application par un exemple minimal du genre print("Bonjour").
 - N'écris qu'un seul fichier.
 """
-        self.status(f"⚡ DIRECT • Qwen écrit le fichier complet • {target}")
+        self.status(f"⚡ DIRECT • agent écrit le fichier complet • {target}")
         content = self._clean_model_output(
             self._ask(
                 prompt,
@@ -1487,6 +1531,12 @@ CONTRAT OBLIGATOIRE:
         related = self.relevant_files(request, max_files=2)
         context_paths = list(dict.fromkeys([target] + needs + related))
         context = self.context_for(context_paths)
+        if self.generated_context:
+            excerpts = [
+                f"--- {name} (déjà généré dans ce lot) ---\n{content[:3500]}"
+                for name, content in list(self.generated_context.items())[-3:]
+            ]
+            context += "\n\nFICHIERS DU LOT À RESPECTER :\n" + "\n\n".join(excerpts)
         prompt = f"""Tu es l'IMPLEMENTEUR de TI-LEX CODEX.
 Demande globale: {request}
 Fichier cible: {target}
@@ -1562,83 +1612,81 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
         return [{"path": target, "content": content}]
 
     def apply_files(self, items: list[dict]) -> list[str]:
-        valid = []
+        """Valide TOUT le lot, puis écrit tous les fichiers ou aucun."""
+        valid: list[tuple[str, str]] = []
+        seen = set()
         for item in items:
             if not isinstance(item, dict) or not item.get("path"):
-                continue
+                raise ValueError("Sortie de génération sans chemin de fichier.")
             rel = str(item["path"]).replace("\\", "/")
-            if any(part in IGNORE_DIRS for part in Path(rel).parts):
-                continue
+            if rel.lower() in seen:
+                raise ValueError(f"Cible en double dans le plan : {rel}")
+            seen.add(rel.lower())
             explicit = any(
                 ref.lower() == rel.lower()
                 or Path(ref).name.lower() == Path(rel).name.lower()
                 for ref in self._explicit_file_refs(self.active_request)
             )
             allowed, reason = self._target_is_allowed(
-                rel,
-                self.active_request,
-                explicit=explicit,
+                rel, self.active_request, explicit=explicit,
             )
             if not allowed:
                 raise ValueError(f"Écriture refusée vers {rel}: {reason}.")
-            self._safe(rel)
-            valid.append((rel, str(item.get("content", ""))))
-        self._backup([rel for rel, _ in valid])
-        changed = []
-        for rel, content in valid:
+
+            content = str(item.get("content", ""))
             valid_content, validation_error = self._validate_generated_content(rel, content)
             if not valid_content:
                 raise ValueError(
                     f"Validation finale refusée pour {rel}: {validation_error}. "
-                    "Le fichier original est conservé."
+                    "Aucun fichier du lot n'a été modifié."
                 )
-
-            # Deuxième garde Python: compile le contenu sans l'exécuter.
             if Path(rel).suffix.lower() == ".py":
-                try:
-                    compile(content, rel, "exec")
-                except SyntaxError as exc:
-                    raise ValueError(
-                        f"Compilation Python refusée pour {rel}: "
-                        f"ligne {exc.lineno}: {exc.msg}. "
-                        "Le fichier original est conservé."
-                    ) from exc
+                compile(content, rel, "exec")
+            self._safe(rel)
+            valid.append((rel, content))
 
-            target = self._safe(rel)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            old = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
-            if old != content:
-                old_lines = (old or "").splitlines()
-                new_lines = content.splitlines()
-                stats = {"added": 0, "modified": 0, "deleted": 0}
-                matcher = difflib.SequenceMatcher(a=old_lines, b=new_lines)
-                for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-                    if tag == "insert":
-                        stats["added"] += j2 - j1
-                    elif tag == "delete":
-                        stats["deleted"] += i2 - i1
-                    elif tag == "replace":
-                        paired = min(i2 - i1, j2 - j1)
-                        stats["modified"] += paired
-                        stats["deleted"] += max(0, (i2 - i1) - paired)
-                        stats["added"] += max(0, (j2 - j1) - paired)
-                diff_lines = list(difflib.unified_diff(
-                    old_lines,
-                    new_lines,
-                    fromfile=f"a/{rel}",
-                    tofile=f"b/{rel}",
-                    lineterm="",
-                    n=2,
-                ))
-                self.last_diffs[rel] = "\n".join(diff_lines)
+        if not valid:
+            return []
 
-                target.write_text(content, encoding="utf-8")
-                self.last_file = rel
-                self.last_content = content
-                self.last_stats = stats
-                self.last_outputs[rel] = content
-                self.last_stats_by_file[rel] = stats
-                changed.append(rel)
+        previous: dict[str, str | None] = {}
+        for rel, _ in valid:
+            path = self._safe(rel)
+            previous[rel] = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
+
+        changed = commit_project_files(
+            self.root,
+            valid,
+            self.state_dir / "backups",
+            expected=self.expected_hashes,
+        )
+        for rel in changed:
+            content = dict(valid)[rel]
+            old = previous[rel] or ""
+            old_lines = old.splitlines()
+            new_lines = content.splitlines()
+            stats = {"added": 0, "modified": 0, "deleted": 0}
+            matcher = difflib.SequenceMatcher(a=old_lines, b=new_lines)
+            for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+                if tag == "insert":
+                    stats["added"] += j2 - j1
+                elif tag == "delete":
+                    stats["deleted"] += i2 - i1
+                elif tag == "replace":
+                    paired = min(i2 - i1, j2 - j1)
+                    stats["modified"] += paired
+                    stats["deleted"] += max(0, i2 - i1 - paired)
+                    stats["added"] += max(0, j2 - j1 - paired)
+
+            self.last_diffs[rel] = "\n".join(difflib.unified_diff(
+                old_lines, new_lines,
+                fromfile=f"a/{rel}", tofile=f"b/{rel}",
+                lineterm="", n=2,
+            ))
+            self.last_file = rel
+            self.last_content = content
+            self.last_stats = stats
+            self.last_outputs[rel] = content
+            self.last_stats_by_file[rel] = stats
         return changed
 
     def _append_readme_summary(self, request: str, changed: list[str], plan: dict) -> None:
@@ -1780,10 +1828,14 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                 raise ValueError("Commande vide après sélection du mode.")
 
             self.status(
-                "⚡ MODE DIRECT • 1 appel Qwen • fichier complet" if mode == "FAST"
+                "⚡ MODE DIRECT • génération ciblée" if mode == "FAST"
+                else "🏗 MODE PROJET • architecture multi-fichiers" if mode == "PROJECT"
                 else "🧠 MODE PRO • analyse approfondie"
             )
 
+            self.task_limit = min(8, max(1, int(max_tasks))) if mode == "PROJECT" else 2
+            self.expected_hashes = {}
+            self.generated_context = {}
             task = self.turbo_task(request) if mode == "FAST" else None
 
                 # Si DIRECT ne peut pas déterminer le fichier cible,
@@ -1802,8 +1854,8 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                 }
             else:
                 plan = self.make_plan(request)
-                plan["mode"] = "PRO"
-            tasks = plan.get("tasks", [])[:2]
+                plan["mode"] = "PROJECT" if mode == "PROJECT" else "PRO"
+            tasks = plan.get("tasks", [])[:self.task_limit]
             request_lower = request.lower()
             readme_requested = any(alias in request_lower for alias in (
                 "readme", "readme.md", "readme.dm", "readm.md", "readm.dm",
@@ -1814,7 +1866,17 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                     files = [str(x) for x in task_item.get("files", [])]
                     if any(Path(x).name.lower() == "readme.md" for x in files):
                         raise ValueError("Le plan IA a ciblé README.md au lieu du fichier demandé.")
-            changed = []
+            # Capture les empreintes AVANT toute génération, pour éviter
+            # d'écraser un fichier modifié pendant le travail de l'agent.
+            for task in tasks:
+                for rel in task.get("files", []):
+                    path = self._safe(str(rel))
+                    original = path.read_bytes() if path.is_file() else None
+                    self.expected_hashes[str(rel)] = fingerprint(original)
+
+            # Génère tout le lot en mémoire. Aucun fichier du projet n'est
+            # touché tant que la dernière étape n'est pas validée.
+            staged = []
             for index, task in enumerate(tasks, 1):
                 task_id = task.get("id", f"T{index:02}")
                 self.status(f"⚙ {task_id} • {task.get('goal', 'génération')} ({index}/{len(tasks)})")
@@ -1824,9 +1886,12 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                     items = self.generate_fast_task(request, task)
                 else:
                     items = self.generate_task(request, task)
-                self.status(f"💾 Sauvegarde • {target_names}")
-                changed.extend(self.apply_files(items))
-            changed = list(dict.fromkeys(changed))
+                staged.extend(items)
+                for item in items:
+                    self.generated_context[str(item["path"])] = str(item["content"])
+
+            self.status(f"🧪 Validation du lot • {len(staged)} fichier(s)")
+            changed = self.apply_files(staged)
             if self._expects_file_changes(request) and not changed:
                 raise RuntimeError(
                     "La commande demandait du code, mais aucun fichier du projet n'a été modifié. "
@@ -1843,7 +1908,7 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             self._remember_run(request, report["changed"], plan)
-            self.status("✅ CODE APPLIQUÉ • fichiers du projet mis à jour")
+            self.status("✅ CODE VALIDÉ ET APPLIQUÉ • sauvegarde du lot disponible")
             mode_label = str(plan.get("mode") or "PRO")
             return CodexResult(
                 True,
