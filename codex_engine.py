@@ -65,6 +65,7 @@ class CodexEngine:
             str(preferred_target).strip().replace("\\", "/")
             if preferred_target else None
         )
+        self.active_request = ""
         self.last_file = None
         self.last_content = ""
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
@@ -1568,7 +1569,16 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
             rel = str(item["path"]).replace("\\", "/")
             if any(part in IGNORE_DIRS for part in Path(rel).parts):
                 continue
-            allowed, reason = self._target_is_allowed(rel, "", explicit=False)
+            explicit = any(
+                ref.lower() == rel.lower()
+                or Path(ref).name.lower() == Path(rel).name.lower()
+                for ref in self._explicit_file_refs(self.active_request)
+            )
+            allowed, reason = self._target_is_allowed(
+                rel,
+                self.active_request,
+                explicit=explicit,
+            )
             if not allowed:
                 raise ValueError(f"Écriture refusée vers {rel}: {reason}.")
             self._safe(rel)
@@ -1765,6 +1775,7 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
 
             mode, clean_request = self._execution_mode(request)
             request = clean_request
+            self.active_request = request
             if not request:
                 raise ValueError("Commande vide après sélection du mode.")
 
