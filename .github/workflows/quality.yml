@@ -1,0 +1,30 @@
+name: TI-LEX code quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-atomic-writes:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install minimal test dependencies
+        run: python -m pip install "requests>=2.31.0"
+      - name: Compile Python source
+        run: python -m py_compile codex.py codex_engine.py codex_gui.py project_pipeline.py secret_store.py config.py
+      - name: Transaction unit tests
+        run: python -m unittest discover -s tests -v
