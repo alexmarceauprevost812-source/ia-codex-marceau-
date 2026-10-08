@@ -365,13 +365,15 @@ class CodexWorker(QObject):
     failed = Signal(str)
 
     def __init__(self, root: Path, request: str, model: str, provider: str = "OLLAMA",
-                 anthropic_model: str | None = None):
+                 anthropic_model: str | None = None,
+                 preferred_target: str | None = None):
         super().__init__()
         self.root = root
         self.request = request
         self.model = model
         self.provider = str(provider or "OLLAMA").upper()
         self.anthropic_model = anthropic_model
+        self.preferred_target = preferred_target
 
     def run(self):
         try:
@@ -381,6 +383,7 @@ class CodexWorker(QObject):
                 status=lambda msg: self.status.emit(str(msg)),
                 provider=self.provider,
                 anthropic_model=self.anthropic_model,
+                preferred_target=self.preferred_target,
             )
             if self.request.strip().lower().startswith("/chat"):
                 result = engine.chat(self.request)
@@ -2604,6 +2607,28 @@ class TiLexCodexWindow(QMainWindow):
             self._log(f"Commande : {request}")
             self._log("CODEX travaille…", "INFO")
 
+            preferred_target = None
+            if self.current_file:
+                try:
+                    preferred_target = str(
+                        self.current_file.resolve().relative_to(self.project_root)
+                    ).replace("\\", "/")
+                    if any(
+                        part.lower() in {"backup", "backups", "sauvegarde", "sauvegardes", ".tilex"}
+                        for part in Path(preferred_target).parts
+                    ):
+                        self._log(
+                            f"Fichier ouvert ignoré comme cible automatique : {preferred_target}",
+                            "WARN",
+                        )
+                    else:
+                        self._log(
+                            f"Fichier cible prioritaire : {preferred_target}",
+                            "INFO",
+                        )
+                except (ValueError, OSError):
+                    preferred_target = None
+
             thread = QThread(self)
             worker = CodexWorker(
                 self.project_root,
@@ -2611,6 +2636,7 @@ class TiLexCodexWindow(QMainWindow):
                 self.config.get("model", "qwen2.5:7b"),
                 self.agent_provider,
                 self.anthropic_model,
+                preferred_target,
             )
             worker.moveToThread(thread)
 
