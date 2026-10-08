@@ -985,7 +985,10 @@ class TiLexCodexWindow(QMainWindow):
         mode_title = QLabel("⚙  MODE ACTIF")
         mode_title.setObjectName("sectionTitle")
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["AUTO", "PRO", "DIRECT"])
+        self.mode_combo.addItems(["AUTO", "PRO", "PROJET", "DIRECT"])
+        self.mode_combo.setToolTip(
+            "PROJET : architecture multi-fichiers, validation du lot et sauvegarde avant écriture."
+        )
         mode_box.addWidget(mode_title)
         mode_box.addWidget(self.mode_combo)
 
@@ -2598,6 +2601,8 @@ class TiLexCodexWindow(QMainWindow):
             if not is_chat:
                 if mode == "PRO":
                     request = "/pro " + request
+                elif mode == "PROJET":
+                    request = "/project " + request
                 elif mode == "DIRECT":
                     request = "/fast " + request
 
