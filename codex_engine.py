@@ -37,7 +37,8 @@ class CodexEngine:
                  endpoint: str = "http://127.0.0.1:11434",
                  status: Callable[[str], None] | None = None,
                  provider: str = "OLLAMA",
-                 anthropic_model: str | None = None):
+                 anthropic_model: str | None = None,
+                 preferred_target: str | None = None):
         self.root = Path(root).resolve()
         self.model = model
         self.endpoint = endpoint.rstrip("/")
@@ -60,6 +61,10 @@ class CodexEngine:
         if self.deepseek_reasoning_effort not in {"none", "low", "high", "max"}:
             self.deepseek_reasoning_effort = "high"
         self.gemini_model = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+        self.preferred_target = (
+            str(preferred_target).strip().replace("\\", "/")
+            if preferred_target else None
+        )
         self.last_file = None
         self.last_content = ""
         self.last_stats = {"added": 0, "modified": 0, "deleted": 0}
@@ -635,6 +640,71 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
         }
         return {w for w in words if w not in stop}
 
+    @staticmethod
+    def _explicit_file_refs(request: str) -> list[str]:
+        matches = re.findall(
+            r"(?i)([A-Za-z0-9_./\\-]+\.(?:py|pyw|js|jsx|mjs|cjs|ts|tsx|html?|css|scss|json|md|txt|toml|ya?ml|sql|sh|bash|zsh|ps1|bat|cmd|c|h|cpp|hpp|cc|java|go|rs|php|rb|lua|xml|ini|cfg|env))",
+            str(request or ""),
+        )
+        return list(dict.fromkeys(x.replace("\\", "/") for x in matches))
+
+    @staticmethod
+    def _requests_new_file(request: str) -> bool:
+        low = str(request or "").lower()
+        markers = (
+            "nouveau fichier", "nouvelle fichier", "crée un fichier", "cree un fichier",
+            "créer un fichier", "nouveau module", "nouvelle page", "nouveau script",
+            "create file", "new file", "new module", "new script",
+        )
+        return any(marker in low for marker in markers)
+
+    def _target_is_allowed(self, rel: str, request: str, *, explicit: bool = False) -> tuple[bool, str]:
+        normalized = str(rel or "").strip().replace("\\", "/").lstrip("/")
+        if not normalized:
+            return False, "chemin vide"
+
+        parts = [part.lower() for part in Path(normalized).parts]
+        hard_blocked = {".git", ".venv", "venv", "node_modules", "__pycache__", ".tilex"}
+        if any(part in hard_blocked for part in parts):
+            return False, "dossier interne/protégé"
+
+        backup_parts = {"backup", "backups", "sauvegarde", "sauvegardes"}
+        request_low = str(request or "").lower()
+        backup_requested = any(word in request_low for word in ("backup", "backups", "sauvegarde", "sauvegardes"))
+        if any(part in backup_parts for part in parts) and not (explicit or backup_requested):
+            return False, "dossier de sauvegarde"
+
+        if Path(normalized).name.lower() == "readme.md":
+            readme_requested = any(alias in request_low for alias in (
+                "readme", "readme.md", "readme.dm", "readm.md", "readm.dm",
+                "reamd.md", "reamd.dm", "redame.md", "redame.dm",
+            ))
+            if not readme_requested:
+                return False, "README non demandé"
+
+        try:
+            self._safe(normalized)
+        except ValueError as exc:
+            return False, str(exc)
+
+        return True, ""
+
+    def _safe_preferred_target(self, request: str) -> str | None:
+        if not self.preferred_target or self._requests_new_file(request):
+            return None
+        explicit_files = self._explicit_file_refs(request)
+        if explicit_files:
+            return None
+        allowed, _reason = self._target_is_allowed(self.preferred_target, request)
+        if not allowed:
+            return None
+        try:
+            if self._safe(self.preferred_target).is_file():
+                return self.preferred_target
+        except (OSError, ValueError):
+            return None
+        return None
+
     def relevant_files(self, request: str, max_files: int = 10) -> list[str]:
         """Classe les fichiers du projet selon leur pertinence pour la demande."""
         terms = self._request_terms(request)
@@ -643,10 +713,16 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
             recent.extend(str(x) for x in item.get("changed", []))
 
         scored = []
+        preferred = self._safe_preferred_target(request)
         for rel in self.inventory(max_files=240):
+            allowed, _reason = self._target_is_allowed(rel, request)
+            if not allowed:
+                continue
             low = rel.lower()
             p = Path(rel)
             score = 0
+            if preferred and rel == preferred:
+                score += 100
             for term in terms:
                 if term in low:
                     score += 6
@@ -675,15 +751,21 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
         if any(word in lower for word in create_words):
             return None
 
-        # Si la dernière commande a modifié exactement un fichier, une demande courte
-        # d'amélioration est très probablement une continuation de ce fichier.
+        # Le fichier actuellement ouvert dans l'éditeur est la source de vérité
+        # pour une modification sans nom de fichier explicite.
+        preferred = self._safe_preferred_target(request)
+        if preferred:
+            return preferred
+
+        # Sinon seulement, utilise la mémoire récente du projet.
         memory = self._load_project_memory()
         if memory:
             last_changed = [str(x) for x in memory[-1].get("changed", []) if str(x)]
             if len(last_changed) == 1:
                 candidate = last_changed[0]
                 try:
-                    if self._safe(candidate).is_file():
+                    allowed, _reason = self._target_is_allowed(candidate, request)
+                    if allowed and self._safe(candidate).is_file():
                         return candidate
                 except (OSError, ValueError):
                     pass
@@ -803,33 +885,62 @@ Retourne uniquement le contenu complet final de {target}, sans explication."""
         return None
 
     def _normalize_plan(self, plan: dict, request: str) -> dict:
-        """Nettoie le plan IA: 1-2 fichiers valides, sans doublons."""
+        """Nettoie le plan IA et force l'écriture vers un fichier réellement pertinent."""
         raw_tasks = plan.get("tasks", []) if isinstance(plan, dict) else []
         clean_tasks = []
         seen = set()
+        explicit_files = self._explicit_file_refs(request)
+        preferred = self._safe_preferred_target(request)
+
         for index, task in enumerate(raw_tasks[:2], 1):
             if not isinstance(task, dict):
                 continue
             files = [str(x).strip().replace("\\", "/") for x in task.get("files", []) if str(x).strip()]
             if not files:
                 continue
+
             rel = files[0]
-            self._safe(rel)
+
+            # Si l'utilisateur n'a nommé aucun fichier et ne crée rien de nouveau,
+            # le fichier ouvert dans l'éditeur gagne sur le choix approximatif de l'IA.
+            if preferred and not explicit_files and not self._requests_new_file(request):
+                rel = preferred
+
+            explicit = any(
+                ref.lower() == rel.lower()
+                or Path(ref).name.lower() == Path(rel).name.lower()
+                for ref in explicit_files
+            )
+            allowed, reason = self._target_is_allowed(rel, request, explicit=explicit)
+            if not allowed:
+                raise ValueError(f"Fichier cible refusé: {rel} ({reason}).")
+
             key = rel.lower()
             if key in seen:
                 continue
             seen.add(key)
+
+            needs = []
+            for need in task.get("needs", [])[:12]:
+                need_rel = str(need).strip().replace("\\", "/")
+                if not need_rel:
+                    continue
+                need_allowed, _ = self._target_is_allowed(need_rel, request, explicit=True)
+                if need_allowed:
+                    needs.append(need_rel)
+
             clean_tasks.append({
                 "id": str(task.get("id") or f"T{index:02}"),
                 "goal": str(task.get("goal") or request),
                 "files": [rel],
-                "needs": [str(x).strip().replace("\\", "/") for x in task.get("needs", [])[:12] if str(x).strip()],
+                "needs": needs,
             })
 
         if not clean_tasks:
             raise ValueError("Le plan IA n'a choisi aucun fichier valide.")
         plan["tasks"] = clean_tasks
         return plan
+
     def make_plan(self, request: str) -> dict:
         files = self.inventory()
         relevant = self.relevant_files(request, max_files=12)
@@ -839,6 +950,7 @@ Projet: {self.root.name}
 Demande: {request}
 Fichiers existants: {json.dumps(files, ensure_ascii=False)}
 Fichiers probablement pertinents: {json.dumps(relevant, ensure_ascii=False)}
+Fichier actuellement ouvert dans l'éditeur: {json.dumps(self._safe_preferred_target(request), ensure_ascii=False)}
 Mémoire récente du projet: {json.dumps(memory[-8:], ensure_ascii=False)}
 
 {self._project_generation_rules("(plan)", request)}
@@ -847,7 +959,7 @@ Utilise la mémoire uniquement pour comprendre la continuité du projet. La dema
 
 Conçois un plan professionnel en utilisant LE MINIMUM DE FICHIERS NÉCESSAIRE.
 Règle principale: utilise 1 seul fichier par défaut. Crée un nouveau fichier si c'est réellement le bon endroit pour le code demandé. Utilise 2 fichiers MAXIMUM seulement si la séparation est techniquement nécessaire ou explicitement demandée par l'utilisateur. N'éparpille jamais une petite modification dans plusieurs fichiers. Si tout peut être proprement fait dans 1 fichier, fais-le dans 1 seul fichier.
-Choisis de vrais noms de fichiers avec une extension adaptée au langage. Respecte un fichier explicitement nommé par l'utilisateur. N’utilise jamais README.md comme remplacement d’un fichier de code sauf si la demande parle explicitement du README.
+Choisis de vrais noms de fichiers avec une extension adaptée au langage. Respecte un fichier explicitement nommé par l'utilisateur. Si aucun autre fichier n'est explicitement nommé et qu'un fichier actuellement ouvert est indiqué, modifie ce fichier en priorité. N'écris jamais dans .tilex, backups, backup, sauvegardes ou autres dossiers de sauvegarde sauf demande explicite. N’utilise jamais README.md comme remplacement d’un fichier de code sauf si la demande parle explicitement du README.
 TI-LEX est un CODEX DE LABORATOIRE: quand la demande concerne un test, conçois du code réellement exécutable dans un labo local autorisé, avec des données fictives ou des cibles locales comme 127.0.0.1. Favorise les tests unitaires, intégration, diagnostics, mocks, serveurs locaux et simulations défensives. Ne planifie pas de vol d'identifiants, malware, persistance, contournement de sécurité, destruction ou attaque contre des systèmes tiers.
 Réponds UNIQUEMENT en JSON valide, sans markdown:
 {{
@@ -1260,6 +1372,14 @@ Règles:
             raise ValueError("DIRECT: aucun fichier cible.")
 
         target = targets[0]
+        explicit = any(
+            ref.lower() == target.lower()
+            or Path(ref).name.lower() == Path(target).name.lower()
+            for ref in self._explicit_file_refs(request)
+        )
+        allowed, reason = self._target_is_allowed(target, request, explicit=explicit)
+        if not allowed:
+            raise ValueError(f"Fichier cible refusé: {target} ({reason}).")
         target_path = self._safe(target)
         old_content = (
             target_path.read_text(encoding="utf-8", errors="replace")
@@ -1345,6 +1465,14 @@ CONTRAT OBLIGATOIRE:
         if not targets:
             raise ValueError("Tâche sans fichier cible")
         target = targets[0]
+        explicit = any(
+            ref.lower() == target.lower()
+            or Path(ref).name.lower() == Path(target).name.lower()
+            for ref in self._explicit_file_refs(request)
+        )
+        allowed, reason = self._target_is_allowed(target, request, explicit=explicit)
+        if not allowed:
+            raise ValueError(f"Fichier cible refusé: {target} ({reason}).")
         target_path = self._safe(target)
         old_content = target_path.read_text(encoding="utf-8", errors="replace") if target_path.is_file() else ""
 
@@ -1440,6 +1568,9 @@ Réponds uniquement avec le contenu COMPLET du fichier final, sans markdown ni e
             rel = str(item["path"]).replace("\\", "/")
             if any(part in IGNORE_DIRS for part in Path(rel).parts):
                 continue
+            allowed, reason = self._target_is_allowed(rel, "", explicit=False)
+            if not allowed:
+                raise ValueError(f"Écriture refusée vers {rel}: {reason}.")
             self._safe(rel)
             valid.append((rel, str(item.get("content", ""))))
         self._backup([rel for rel, _ in valid])
