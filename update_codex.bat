@@ -17,6 +17,18 @@ if errorlevel 1 (
 )
 
 echo [1/5] Mise a jour du projet...
+set "README_DIRTY="
+for /f "delims=" %%R in ('git status --porcelain -- README.md') do set "README_DIRTY=1"
+if defined README_DIRTY (
+  echo [INFO] README.md a des modifications locales.
+  echo [INFO] Sauvegarde du README dans Git stash ^(aucune suppression^).
+  git stash push -m "TI-LEX sauvegarde auto README local" -- README.md
+  if errorlevel 1 (
+    echo [ERREUR] Sauvegarde README impossible. Mise a jour abandonnee.
+    pause
+    exit /b 1
+  )
+)
 git pull --ff-only origin main
 if errorlevel 1 (
   echo.
@@ -74,10 +86,18 @@ if errorlevel 1 (
 
 echo.
 echo [5/5] Verification rapide du code...
-".venv\Scripts\python.exe" -m py_compile codex_engine.py codex_gui.py secret_store.py
+".venv\Scripts\python.exe" -m py_compile codex_engine.py codex_gui.py secret_store.py project_pipeline.py
 if errorlevel 1 (
   echo [ERREUR] Une erreur Python a ete detectee.
   echo Le programme ne sera pas lance.
+  pause
+  exit /b 1
+)
+
+echo [TESTS] Verification du moteur multi-fichiers...
+".venv\Scripts\python.exe" -m unittest discover -s tests -v
+if errorlevel 1 (
+  echo [ERREUR] Des tests ont echoue. Le programme ne sera pas lance.
   pause
   exit /b 1
 )
