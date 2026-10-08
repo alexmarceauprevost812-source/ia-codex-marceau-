@@ -1606,6 +1606,26 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                 {"mode": "CHAT"},
             )
 
+    @staticmethod
+    def _expects_file_changes(request: str) -> bool:
+        """Une commande normale de développement doit produire de vrais changements de fichiers."""
+        low = str(request or "").strip().lower()
+        if not low:
+            return False
+        non_write_prefixes = (
+            "explique", "expliquer", "analyse", "analyser", "résume", "resume",
+            "montre", "liste", "dis-moi", "dit moi", "pourquoi", "comment fonctionne",
+        )
+        if low.startswith(non_write_prefixes):
+            return False
+        write_words = (
+            "ajoute", "ajouter", "crée", "cree", "créer", "modifie", "modifier",
+            "corrige", "corriger", "remplace", "remplacer", "implémente", "implemente",
+            "code", "coder", "construis", "construit", "répare", "repare",
+            "supprime", "supprimer", "mets à jour", "met à jour", "update",
+        )
+        return any(word in low for word in write_words)
+
     def build(self, request: str, max_tasks: int = 40) -> CodexResult:
         try:
             self.last_outputs = {}
@@ -1664,9 +1684,16 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                     items = self.generate_task(request, task)
                 self.status(f"💾 Sauvegarde • {target_names}")
                 changed.extend(self.apply_files(items))
+            changed = list(dict.fromkeys(changed))
+            if self._expects_file_changes(request) and not changed:
+                raise RuntimeError(
+                    "La commande demandait du code, mais aucun fichier du projet n'a été modifié. "
+                    "TI-LEX refuse de remplacer cette action par un simple résumé."
+                )
+
             report = {
                 "request": request,
-                "changed": list(dict.fromkeys(changed)),
+                "changed": changed,
                 "tasks_completed": len(tasks),
                 "plan": plan,
             }
@@ -1674,7 +1701,7 @@ Réponds comme un assistant de développement utile. Si la question concerne un 
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             self._remember_run(request, report["changed"], plan)
-            self.status("✅ Génération terminée")
+            self.status("✅ CODE APPLIQUÉ • fichiers du projet mis à jour")
             mode_label = str(plan.get("mode") or "PRO")
             return CodexResult(
                 True,
