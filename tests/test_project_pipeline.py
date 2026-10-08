@@ -19,7 +19,7 @@ class ProjectPipelineTests(unittest.TestCase):
         self.backups = self.root / ".tilex" / "backups"
 
     def test_entire_batch_is_written_and_backed_up(self):
-        (self.root / "a.py").write_text("before\n", encoding="utf-8")
+        (self.root / "a.py").write_bytes(b"before\n")
         changed = commit_project_files(
             self.root,
             [("a.py", "after\n"), ("src/b.py", "print('ok')\n")],
