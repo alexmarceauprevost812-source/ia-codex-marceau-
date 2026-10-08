@@ -752,7 +752,7 @@ class TiLexCodexWindow(QMainWindow):
         self.engine_detail.setObjectName("engineDetail")
 
         self.engine_flow = QLabel(
-            "ANALYSE  →  PLAN  →  EXÉCUTION  →  ÉCRITURE  →  VALIDATION  →  README"
+            "ANALYSE  →  PLAN  →  CODE  →  ÉCRITURE FICHIERS  →  VALIDATION"
         )
         self.engine_flow.setObjectName("engineFlow")
 
@@ -2017,34 +2017,6 @@ class TiLexCodexWindow(QMainWindow):
         elif any(word in low for word in ("apply", "appli", "exécut", "execute", "action")):
             self._set_engine_stage("EXÉCUTION", "application du plan", 45)
 
-    def _update_readme_summary(self, request: str, changed: list[str], result_message: str):
-        readme = self.project_root / "README.md"
-        try:
-            previous = readme.read_text(encoding="utf-8", errors="replace") if readme.exists() else f"# {self.project_root.name}\n"
-            start = "<!-- TI-LEX-CODEX-SUMMARY:START -->"
-            end = "<!-- TI-LEX-CODEX-SUMMARY:END -->"
-            files = ", ".join(changed) if changed else "aucun fichier signalé"
-            block = (
-                f"\n{start}\n"
-                f"## Dernière action TI-LEX CODEX\n\n"
-                f"- **Commande :** {request}\n"
-                f"- **Résultat :** {result_message}\n"
-                f"- **Fichiers :** {files}\n"
-                f"- **Mise à jour :** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"{end}\n"
-            )
-            if start in previous and end in previous:
-                before = previous.split(start, 1)[0].rstrip()
-                after = previous.split(end, 1)[1].lstrip()
-                content = before + block + ("\n" + after if after else "")
-            else:
-                content = previous.rstrip() + "\n" + block
-            readme.write_text(content, encoding="utf-8")
-            return "README.md"
-        except Exception as exc:
-            self._log(f"Résumé README non mis à jour : {exc}", "WARN")
-            return None
-
     def _log(self, message: str, kind: str = "INFO"):
         self.output.appendPlainText(f"[{kind}]  {message}")
 
@@ -2718,14 +2690,7 @@ class TiLexCodexWindow(QMainWindow):
 
             self._log(result.message, "SUCCESS")
             changed = list(result.changed or [])
-            self._set_engine_stage("README", "mise à jour du résumé", 92)
-            readme_changed = self._update_readme_summary(
-                self.last_codex_request,
-                changed,
-                result.message,
-            )
-            if readme_changed and readme_changed not in changed:
-                changed.append(readme_changed)
+            self._set_engine_stage("VALIDATION", "fichiers du projet appliqués", 92)
 
             self._render_codex_results(run_data, changed)
 
